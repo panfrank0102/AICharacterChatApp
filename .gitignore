@@ -17,3 +17,6 @@ local.properties
 /API key.txt
 deps_download.log
 /emulator_verify*.png
+/ui_*.png
+/ui.xml
+/ui_smoke.ps1
