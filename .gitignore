@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+.gradle-home
+/API key.txt
+deps_download.log
+/emulator_verify*.png

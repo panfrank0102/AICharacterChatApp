@@ -1,0 +1,60 @@
+package com.myagent.app.network
+
+import com.myagent.app.network.dto.ChatMessage
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+
+/**
+ * 真实 API 验证测试（开发步骤第 5 步验收）。
+ *
+ * 从工作区根目录的 "API key.txt" 读取 DeepSeek API Key（不把密钥写入源码）。
+ * 找不到密钥文件时跳过（直接返回，不报失败）。
+ */
+class OpenAiClientRealApiTest {
+
+    private fun loadApiKey(): String? {
+        val candidates = listOf(
+            File("API key.txt"),
+            File("../API key.txt"),
+            File("app/API key.txt"),
+            File("D:\\Codex\\MyAgent_android\\API key.txt"),
+        )
+        for (f in candidates) {
+            if (f.exists()) {
+                val key = f.readLines().firstOrNull { it.trim().startsWith("sk-") }?.trim()
+                if (!key.isNullOrEmpty()) return key
+            }
+        }
+        return null
+    }
+
+    @Test
+    fun chatStream_withRealDeepSeekApi_returnsStreamedContent() {
+        val apiKey = loadApiKey()
+        if (apiKey == null) {
+            println("SKIP: API key file not found")
+            return
+        }
+
+        val client = OpenAiClient()
+        val chunks = runBlocking {
+            client.chatStream(
+                baseUrl = "https://api.deepseek.com",
+                apiKey = apiKey,
+                model = "deepseek-chat",
+                messages = listOf(ChatMessage(role = "user", content = "请用一句话介绍你自己")),
+                temperature = 0.7
+            ).toList()
+        }
+
+        assertTrue("应收到至少一个流式分片", chunks.isNotEmpty())
+        val joined = chunks.joinToString("")
+        assertFalse("合并后的回复不应为空", joined.isBlank())
+        println("收到 ${chunks.size} 个分片，共 ${joined.length} 字符")
+        println("回复内容：${joined.take(100)}")
+    }
+}

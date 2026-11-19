@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 自用应用：放行明文 HTTP，便于接入本地 Ollama 等服务 -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
