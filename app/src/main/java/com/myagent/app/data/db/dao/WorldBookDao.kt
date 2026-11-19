@@ -15,6 +15,9 @@ interface WorldBookDao {
     @Query("SELECT * FROM worldbook_entry WHERE conversation_id = :conversationId ORDER BY priority DESC, id ASC")
     fun observeByConversation(conversationId: Long): Flow<List<WorldBookEntryEntity>>
 
+    @Query("SELECT * FROM worldbook_entry WHERE id = :id")
+    suspend fun getById(id: Long): WorldBookEntryEntity?
+
     @Query(
         "SELECT * FROM worldbook_entry WHERE conversation_id = :conversationId " +
             "AND enabled = 1 ORDER BY priority DESC, id ASC"

@@ -39,7 +39,7 @@ private val JSON_MEDIA_TYPE = "application/json".toMediaType()
  *
  * @param client 底层 OkHttp 客户端，默认已配置流式读取不超时。
  */
-class OpenAiClient(private val client: OkHttpClient = defaultClient()) {
+class OpenAiClient(private val client: OkHttpClient = defaultClient()) : ChatApi {
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -60,12 +60,12 @@ class OpenAiClient(private val client: OkHttpClient = defaultClient()) {
      * @return 增量文本流。
      * @throws ApiException 网络、HTTP 或解析错误。
      */
-    fun chatStream(
+    override fun chatStream(
         baseUrl: String,
         apiKey: String,
         model: String,
         messages: List<ChatMessage>,
-        temperature: Double = 0.7,
+        temperature: Double,
     ): Flow<String> = flow {
         coroutineScope {
             // 阻塞读取放在 IO 协程中，通过 Channel 把增量送回 Flow 的收集上下文。

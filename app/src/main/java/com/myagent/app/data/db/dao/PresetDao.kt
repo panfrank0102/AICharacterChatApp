@@ -18,6 +18,9 @@ interface PresetDao {
     @Query("SELECT * FROM model_preset ORDER BY name ASC")
     fun observeAll(): Flow<List<ModelPresetEntity>>
 
+    @Query("SELECT * FROM model_preset ORDER BY name ASC")
+    suspend fun getAll(): List<ModelPresetEntity>
+
     @Query("SELECT * FROM model_preset WHERE id = :id")
     suspend fun getById(id: Long): ModelPresetEntity?
 
