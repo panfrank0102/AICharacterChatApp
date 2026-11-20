@@ -18,6 +18,9 @@ data class ConversationEntity(
     val presetId: Long? = null,
     @ColumnInfo(name = "system_prompt")
     val systemPrompt: String = "",
+    /** 后置提示词：每轮请求中插在对话历史之后（整段消息最后一条 system）的补充指令。 */
+    @ColumnInfo(name = "post_history_prompt")
+    val postHistoryPrompt: String = "",
     @ColumnInfo(name = "scan_count")
     val scanCount: Int = 20,
     @ColumnInfo(name = "recursion_depth")

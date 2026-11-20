@@ -256,6 +256,23 @@ class ChatRepositoryTest {
         assertEquals("none", api.requests.single().reasoningEffort)
     }
 
+    @Test
+    fun sendMessage_includesSessionPostHistoryPromptAsLastSystemMessage() = runBlocking {
+        seedConversation(systemPrompt = "会话人设", postHistoryPrompt = "把{{user}}称作队长，并输出状态栏")
+        seedPreset()
+        val api = FakeChatApi(chunks = listOf("好"))
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        val request = api.requests.single()
+        // 后置提示词是整段消息的最后一条 system，且位于本轮用户输入之后
+        assertEquals("system", request.messages.last().role)
+        assertEquals("把用户称作队长，并输出状态栏", request.messages.last().content)
+        val beforePost = request.messages[request.messages.size - 2]
+        assertEquals("user", beforePost.role)
+        assertEquals("你好", beforePost.content)
+    }
+
     // ---------------------------------------------------------------------
     // 测试辅助
     // ---------------------------------------------------------------------
@@ -278,6 +295,7 @@ class ChatRepositoryTest {
         title: String = "",
         presetId: Long? = PRESET_ID,
         systemPrompt: String = "",
+        postHistoryPrompt: String = "",
         scanCount: Int = 20,
         recursionDepth: Int = 2,
     ) {
@@ -287,6 +305,7 @@ class ChatRepositoryTest {
                 title = title,
                 presetId = presetId,
                 systemPrompt = systemPrompt,
+                postHistoryPrompt = postHistoryPrompt,
                 scanCount = scanCount,
                 recursionDepth = recursionDepth,
                 createdAt = 0L,

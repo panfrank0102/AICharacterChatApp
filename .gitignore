@@ -22,5 +22,11 @@ deps_download.log
 /ui_smoke.ps1
 /verify_reasoning.ps1
 /verify_import.ps1
+/verify_status.ps1
+/inspect_db.py
+/myagent_dump.db
+/db_myagent.db
+/db_myagent.db-wal
+/db_myagent.db-shm
 /card_export.json
 /艾诺迪亚大陆.png

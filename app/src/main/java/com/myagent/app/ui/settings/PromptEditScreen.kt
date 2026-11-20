@@ -25,7 +25,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 
 /**
- * 提示词编辑页：编辑全局提示词或某个会话的提示词，右上角"保存"写回并返回。
+ * 提示词编辑页：编辑全局提示词、会话前置提示词或会话后置提示词，右上角"保存"写回并返回。
  *
  * @param onBack 返回上一页（保存成功后也会调用）。
  */
@@ -39,10 +39,21 @@ fun PromptEditScreen(onBack: () -> Unit) {
     )
     val text by vm.text.collectAsState()
 
+    val title = when {
+        vm.conversationId == null -> "全局提示词"
+        vm.isPostHistory -> "后置提示词"
+        else -> "会话提示词"
+    }
+    val placeholder = if (vm.isPostHistory) {
+        "输入后置提示词（每轮插在对话历史之后的 system 指令，如输出格式/状态栏要求）…"
+    } else {
+        "输入人设/扮演规则等系统提示词…"
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (vm.conversationId == null) "全局提示词" else "会话提示词") },
+                title = { Text(title) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
@@ -68,7 +79,7 @@ fun PromptEditScreen(onBack: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                placeholder = { Text("输入人设/扮演规则等系统提示词…") },
+                placeholder = { Text(placeholder) },
             )
         }
     }

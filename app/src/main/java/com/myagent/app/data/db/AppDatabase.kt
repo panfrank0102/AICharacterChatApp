@@ -19,7 +19,8 @@ import com.myagent.app.data.db.entity.WorldBookEntryEntity
  * 应用本地数据库（Room）。
  *
  * 需在 Application 中调用 [init] 完成初始化，之后通过 [instance] 获取单例。
- * 已提供 1→2（模型预设新增思考强度字段）与 2→3（会话新增用户称呼字段）的显式迁移；
+ * 已提供 1→2（模型预设新增思考强度字段）、2→3（会话新增用户称呼字段）
+ * 与 3→4（会话新增后置提示词字段）的显式迁移；
  * 其余版本变化仍采用重建表策略（[RoomDatabase.Builder.fallbackToDestructiveMigration]）。
  */
 @Database(
@@ -29,7 +30,7 @@ import com.myagent.app.data.db.entity.WorldBookEntryEntity
         MessageEntity::class,
         WorldBookEntryEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -60,6 +61,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** 3 → 4：会话新增后置提示词（post_history_prompt）字段。 */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE conversation ADD COLUMN post_history_prompt TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         /** 使用 Application Context 创建（或复用）数据库单例。 */
         fun init(context: Context) {
             synchronized(this) {
@@ -69,7 +77,7 @@ abstract class AppDatabase : RoomDatabase() {
                         AppDatabase::class.java,
                         "myagent.db",
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                         .fallbackToDestructiveMigration(dropAllTables = true)
                         .build()
                 }

@@ -61,11 +61,12 @@ private const val SCAN_COUNT_MAX_LENGTH = 3
 /**
  * 会话设置页。
  *
- * 展示并编辑当前会话的模型预设、前置提示词入口、世界书入口、世界书扫描条数与递归深度；
+ * 展示并编辑当前会话的模型预设、前置/后置提示词入口、世界书入口、世界书扫描条数与递归深度；
  * 修改会即时写回数据库，从下一条消息起生效。
  *
  * @param onBack 返回上一页。
- * @param onOpenPromptEdit 打开提示词编辑页，参数为会话 id。
+ * @param onOpenPromptEdit 打开（前置）提示词编辑页，参数为会话 id。
+ * @param onOpenPostHistoryEdit 打开后置提示词编辑页，参数为会话 id。
  * @param onOpenWorldbook 打开当前会话的世界书列表页。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,6 +74,7 @@ private const val SCAN_COUNT_MAX_LENGTH = 3
 fun SessionSettingsScreen(
     onBack: () -> Unit,
     onOpenPromptEdit: (Long) -> Unit,
+    onOpenPostHistoryEdit: (Long) -> Unit,
     onOpenWorldbook: () -> Unit,
 ) {
     val vm: SessionSettingsViewModel = viewModel(
@@ -178,6 +180,14 @@ fun SessionSettingsScreen(
                     maxLength = 30,
                 ),
                 onClick = { onOpenPromptEdit(vm.conversationId) },
+            )
+            SettingsEntryRow(
+                title = "后置提示词",
+                subtitle = truncate(
+                    text = conversation?.postHistoryPrompt.orEmpty().ifBlank { "未设置（插在对话历史之后）" },
+                    maxLength = 30,
+                ),
+                onClick = { onOpenPostHistoryEdit(vm.conversationId) },
             )
             SettingsEntryRow(
                 title = "世界书",

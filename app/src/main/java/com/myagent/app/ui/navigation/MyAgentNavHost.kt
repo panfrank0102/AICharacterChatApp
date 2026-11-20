@@ -86,13 +86,22 @@ fun MyAgentNavHost() {
             SessionSettingsScreen(
                 onBack = { navController.popBackStack() },
                 onOpenPromptEdit = { conversationId -> navController.navigate(Routes.promptEdit(conversationId)) },
+                onOpenPostHistoryEdit = { conversationId ->
+                    navController.navigate(Routes.promptEdit(conversationId, Routes.PROMPT_KIND_POST_HISTORY))
+                },
                 onOpenWorldbook = { navController.navigate(Routes.worldbook(id)) },
             )
         }
 
         composable(
             route = Routes.PROMPT_EDIT,
-            arguments = listOf(navArgument(Routes.ARG_CONVERSATION_ID) { type = NavType.LongType; defaultValue = -1L }),
+            arguments = listOf(
+                navArgument(Routes.ARG_CONVERSATION_ID) { type = NavType.LongType; defaultValue = -1L },
+                navArgument(Routes.ARG_PROMPT_KIND) {
+                    type = NavType.StringType
+                    defaultValue = Routes.PROMPT_KIND_SESSION
+                },
+            ),
         ) {
             PromptEditScreen(onBack = { navController.popBackStack() })
         }

@@ -264,10 +264,9 @@ private fun MessageBubble(
             color = bubbleColor,
             contentColor = textColor,
         ) {
-            Text(
-                text = content,
+            ChatMessageContent(
+                content = content,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.bodyMedium,
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {

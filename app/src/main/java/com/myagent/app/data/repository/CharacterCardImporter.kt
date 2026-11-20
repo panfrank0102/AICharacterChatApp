@@ -68,6 +68,7 @@ class CharacterCardImporter(
             title = title,
             presetId = null,
             systemPrompt = buildSystemPrompt(card),
+            postHistoryPrompt = buildPostHistoryPrompt(card),
             scanCount = scanCount,
             recursionDepth = recursionDepth,
             userName = DEFAULT_USER_NAME,
@@ -152,6 +153,13 @@ class CharacterCardImporter(
                 .joinToString("\n\n")
                 .replace("{{char}}", card.name)
         }
+
+        /**
+         * 构造后置提示词：取卡片 `post_history_instructions` 并替换其中的 `{{char}}`；
+         * 卡片未声明时返回空串（不写后置提示词）。
+         */
+        fun buildPostHistoryPrompt(card: CharacterCard): String =
+            card.postHistoryInstructions.replace("{{char}}", card.name)
 
         /**
          * 合并多组关键词并拆分。

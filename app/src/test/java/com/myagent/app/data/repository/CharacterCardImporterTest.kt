@@ -43,6 +43,7 @@ class CharacterCardImporterTest {
             scenario = "边境小镇",
             firstMes = "（应被忽略的开场白）",
             mesExample = "示例对话",
+            postHistoryInstructions = "后置要求：{{char}}要冷静",
             alternateGreetings = listOf("开场白一", "开场白二"),
             worldBook = WorldBook(
                 scanDepth = 4,
@@ -78,6 +79,8 @@ class CharacterCardImporterTest {
         assertTrue(prompt.contains("勇敢"))
         assertTrue(prompt.contains("边境小镇"))
         assertTrue(prompt.contains("示例对话"))
+        // 卡片 post_history_instructions → 会话后置提示词（{{char}} 已替换）
+        assertEquals("后置要求：测试角色要冷静", conversation?.postHistoryPrompt)
 
         // 世界书：1 条无关键词跳过，2 条导入，关键词按 | 拆分
         assertEquals(1, result.skippedWorldbookCount)
@@ -121,6 +124,8 @@ class CharacterCardImporterTest {
         }
         assertEquals(listOf("布里塔尼亚帝国", "布里塔尼亚"), empireEntry.keywords.split('\n'))
         assertTrue(conversationDao.find(result.conversationId)?.systemPrompt.orEmpty().contains("RPG冒险故事系统"))
+        // 本卡 post_history_instructions 为空，后置提示词应为空串
+        assertEquals("", conversationDao.find(result.conversationId)?.postHistoryPrompt)
     }
 
     // ---------------------------------------------------------------------

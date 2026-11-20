@@ -154,6 +154,83 @@ class PromptAssemblerTest {
         )
     }
 
+    @Test
+    fun assemble_placesPostHistoryPromptAsLastSystemMessage() {
+        val result = PromptAssembler.assemble(
+            globalPrompt = "全局",
+            sessionPrompt = "会话",
+            postHistoryPrompt = "后置指令",
+            worldbookEntries = emptyList(),
+            history = listOf(
+                message("user", "旧问"),
+                message("assistant", "旧答"),
+            ),
+            userInput = "新问",
+            contextLimitChars = 100_000,
+        )
+        assertEquals(
+            listOf(
+                message("system", "全局"),
+                message("system", "会话"),
+                message("user", "旧问"),
+                message("assistant", "旧答"),
+                message("user", "新问"),
+                message("system", "后置指令"),
+            ),
+            result,
+        )
+        assertEquals("system", result.last().role)
+    }
+
+    @Test
+    fun assemble_skipsBlankPostHistoryPrompt() {
+        val result = PromptAssembler.assemble(
+            globalPrompt = "全局",
+            sessionPrompt = "",
+            postHistoryPrompt = "  ",
+            worldbookEntries = emptyList(),
+            history = emptyList(),
+            userInput = "你好",
+            contextLimitChars = 100_000,
+        )
+        assertEquals(listOf(message("system", "全局"), message("user", "你好")), result)
+    }
+
+    @Test
+    fun assemble_trimsHistoryToFitPostHistoryPrompt() {
+        // 固定部分 = 用户输入 1 + 后置提示词 2 = 3；两条历史各 3 字符，总 9。
+        // 预算 6：裁掉最旧历史 "aaa" 后剩 3 + 3 = 6，恰好不超限。
+        val result = PromptAssembler.assemble(
+            globalPrompt = "",
+            sessionPrompt = "",
+            postHistoryPrompt = "pp",
+            worldbookEntries = emptyList(),
+            history = listOf(
+                message("user", "aaa"),
+                message("assistant", "bbb"),
+            ),
+            userInput = "u",
+            contextLimitChars = 6,
+        )
+        assertEquals(listOf("bbb", "u", "pp"), result.map { it.content })
+    }
+
+    @Test
+    fun assemble_keepsPostHistoryPromptWhenBudgetTooSmall() {
+        val result = PromptAssembler.assemble(
+            globalPrompt = "g",
+            sessionPrompt = "",
+            postHistoryPrompt = "pp",
+            worldbookEntries = listOf(entry(id = 1, content = "ww")),
+            history = listOf(message("user", "old")),
+            userInput = "u",
+            contextLimitChars = 0,
+        )
+        // 预算为 0 时历史与世界书都被裁掉，提示词与用户输入、后置提示词仍保留。
+        assertEquals(listOf("g", "u", "pp"), result.map { it.content })
+        assertEquals("system", result.last().role)
+    }
+
     private fun entry(
         id: Long,
         content: String,

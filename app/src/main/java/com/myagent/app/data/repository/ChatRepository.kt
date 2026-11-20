@@ -130,6 +130,7 @@ class ChatRepository(
         val messages = PromptAssembler.assemble(
             globalPrompt = snapshot.globalPrompt,
             sessionPrompt = conversation.systemPrompt,
+            postHistoryPrompt = conversation.postHistoryPrompt,
             worldbookEntries = matched,
             history = historyForPrompt.map { ChatMessage(it.role, it.content) },
             userInput = userText,

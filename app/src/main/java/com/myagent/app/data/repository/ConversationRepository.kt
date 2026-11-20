@@ -23,6 +23,7 @@ class ConversationRepository(private val dao: ConversationDao) {
     /**
      * 新建会话，创建时间与更新时间均取当前时刻。
      *
+     * @param postHistoryPrompt 后置提示词，每轮请求中插在对话历史之后（最后一条 system）。
      * @param userName 发送消息时替换 `{{user}}` 宏所用的用户称呼。
      * @return 新会话 id。
      */
@@ -30,6 +31,7 @@ class ConversationRepository(private val dao: ConversationDao) {
         title: String,
         presetId: Long? = null,
         systemPrompt: String = "",
+        postHistoryPrompt: String = "",
         scanCount: Int = 20,
         recursionDepth: Int = 2,
         userName: String = "用户",
@@ -40,6 +42,7 @@ class ConversationRepository(private val dao: ConversationDao) {
                 title = title,
                 presetId = presetId,
                 systemPrompt = systemPrompt,
+                postHistoryPrompt = postHistoryPrompt,
                 scanCount = scanCount,
                 recursionDepth = recursionDepth,
                 userName = userName,
@@ -55,11 +58,12 @@ class ConversationRepository(private val dao: ConversationDao) {
         dao.update(existing.copy(title = title))
     }
 
-    /** 更新会话级设置（预设、提示词、扫描条数、递归深度、用户称呼）。 */
+    /** 更新会话级设置（预设、前置提示词、后置提示词、扫描条数、递归深度、用户称呼）。 */
     suspend fun updateSettings(
         id: Long,
         presetId: Long?,
         systemPrompt: String,
+        postHistoryPrompt: String,
         scanCount: Int,
         recursionDepth: Int,
         userName: String,
@@ -69,6 +73,7 @@ class ConversationRepository(private val dao: ConversationDao) {
             existing.copy(
                 presetId = presetId,
                 systemPrompt = systemPrompt,
+                postHistoryPrompt = postHistoryPrompt,
                 scanCount = scanCount,
                 recursionDepth = recursionDepth,
                 userName = userName,

@@ -92,6 +92,7 @@ class SessionSettingsViewModel(
                 id = conversationId,
                 presetId = updated.presetId,
                 systemPrompt = updated.systemPrompt,
+                postHistoryPrompt = updated.postHistoryPrompt,
                 scanCount = updated.scanCount,
                 recursionDepth = updated.recursionDepth,
                 userName = updated.userName,
