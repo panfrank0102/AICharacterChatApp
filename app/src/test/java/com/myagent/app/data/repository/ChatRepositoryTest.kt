@@ -22,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,6 +66,7 @@ class ChatRepositoryTest {
         assertEquals(STORED_API_KEY, request.apiKey)
         assertEquals(MODEL, request.model)
         assertEquals(0.7, request.temperature, 1e-6)
+        assertNull("未设置思考强度时不应传给接口", request.reasoningEffort)
         assertEquals("system", request.messages[0].role)
         assertEquals("全局人设", request.messages[0].content)
         assertEquals("system", request.messages[1].role)
@@ -219,6 +221,41 @@ class ChatRepositoryTest {
         assertEquals(userText.take(20), conversation?.title)
     }
 
+    @Test
+    fun sendMessage_passesReasoningEffortFromPreset() = runBlocking {
+        seedConversation()
+        seedPreset(reasoningEffort = "medium")
+        val api = FakeChatApi(chunks = listOf("好"))
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        assertEquals("medium", api.requests.single().reasoningEffort)
+    }
+
+    @Test
+    fun sendMessage_withoutReasoningEffort_passesNull() = runBlocking {
+        seedConversation()
+        seedPreset(reasoningEffort = null)
+        val api = FakeChatApi(chunks = listOf("好"))
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        assertNull(api.requests.single().reasoningEffort)
+    }
+
+    @Test
+    fun regenerate_keepsReasoningEffortFromPreset() = runBlocking {
+        seedConversation(title = "已有标题")
+        seedPreset(reasoningEffort = "none")
+        messageDao.seed(conversationId = CONVERSATION_ID, role = "user", content = "第一次提问")
+        messageDao.seed(conversationId = CONVERSATION_ID, role = "assistant", content = "旧回复")
+        val api = FakeChatApi(chunks = listOf("新回复"))
+
+        repository(api = api).regenerate(CONVERSATION_ID).toList()
+
+        assertEquals("none", api.requests.single().reasoningEffort)
+    }
+
     // ---------------------------------------------------------------------
     // 测试辅助
     // ---------------------------------------------------------------------
@@ -258,7 +295,7 @@ class ChatRepositoryTest {
         )
     }
 
-    private fun seedPreset() {
+    private fun seedPreset(reasoningEffort: String? = null) {
         presetDao.seed(
             ModelPresetEntity(
                 id = PRESET_ID,
@@ -266,6 +303,7 @@ class ChatRepositoryTest {
                 baseUrl = BASE_URL,
                 apiKeyEncrypted = STORED_API_KEY,
                 model = MODEL,
+                reasoningEffort = reasoningEffort,
             ),
         )
     }
@@ -522,8 +560,9 @@ private class FakeChatApi(
         model: String,
         messages: List<ChatMessage>,
         temperature: Double,
+        reasoningEffort: String?,
     ): Flow<String> = flow {
-        requests.add(RecordedRequest(baseUrl, apiKey, model, messages, temperature))
+        requests.add(RecordedRequest(baseUrl, apiKey, model, messages, temperature, reasoningEffort))
         for (chunk in chunks) {
             emit(chunk)
         }
@@ -538,4 +577,5 @@ private data class RecordedRequest(
     val model: String,
     val messages: List<ChatMessage>,
     val temperature: Double,
+    val reasoningEffort: String?,
 )

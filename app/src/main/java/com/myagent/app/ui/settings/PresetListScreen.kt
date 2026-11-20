@@ -150,6 +150,11 @@ private fun PresetCard(
                 Text(text = preset.name, style = MaterialTheme.typography.titleMedium)
                 Text(text = preset.model, style = MaterialTheme.typography.bodyMedium)
                 Text(
+                    text = "思考强度：${reasoningEffortLabel(preset.reasoningEffort)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
                     text = preset.baseUrl,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

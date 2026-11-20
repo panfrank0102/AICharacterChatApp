@@ -27,6 +27,7 @@ class PresetRepository(private val dao: PresetDao) {
      *
      * @param id 预设 id，0 表示新增。
      * @param apiKeyPlain API Key 明文；为空时编辑已有预设会保留原密文，新增预设则保存空串。
+     * @param reasoningEffort 思考强度（`none`/`low`/`medium`/`high`）；null 表示不设置（不发送该参数）。
      */
     suspend fun save(
         id: Long = 0,
@@ -34,6 +35,7 @@ class PresetRepository(private val dao: PresetDao) {
         baseUrl: String,
         apiKeyPlain: String,
         model: String,
+        reasoningEffort: String? = null,
     ) {
         val existing = if (id == 0L) null else dao.getById(id)
         val encrypted = when {
@@ -47,6 +49,7 @@ class PresetRepository(private val dao: PresetDao) {
                 baseUrl = baseUrl,
                 apiKeyEncrypted = encrypted,
                 model = model,
+                reasoningEffort = reasoningEffort,
             )
         } else {
             ModelPresetEntity(
@@ -55,6 +58,7 @@ class PresetRepository(private val dao: PresetDao) {
                 baseUrl = baseUrl,
                 apiKeyEncrypted = encrypted,
                 model = model,
+                reasoningEffort = reasoningEffort,
             )
         }
         dao.upsert(entity)

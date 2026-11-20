@@ -1,5 +1,6 @@
 package com.myagent.app.network.dto
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -13,6 +14,9 @@ data class ChatMessage(
 
 /**
  * OpenAI 兼容 /chat/completions 接口的请求体。
+ *
+ * [reasoningEffort] 对应 DeepSeek 的 `reasoning_effort` 参数：
+ * `none`/`low`/`medium`/`high`，null 时不发送该字段（兼容不支持该参数的模型）。
  */
 @Serializable
 data class ChatRequest(
@@ -20,6 +24,8 @@ data class ChatRequest(
     val messages: List<ChatMessage>,
     val stream: Boolean = true,
     val temperature: Double,
+    @SerialName("reasoning_effort")
+    val reasoningEffort: String? = null,
 )
 
 /**

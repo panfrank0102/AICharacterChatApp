@@ -32,6 +32,19 @@ import okio.BufferedSource
 private val JSON_MEDIA_TYPE = "application/json".toMediaType()
 
 /**
+ * OpenAI 兼容接口的 JSON 配置（internal 便于单元测试复用）。
+ *
+ * - [Json.ignoreUnknownKeys]：忽略服务端新增字段；
+ * - [Json.encodeDefaults]：确保 `stream=true` 等默认值写入请求体；
+ * - [Json.explicitNulls] = false：null 字段（如未设置的 `reasoning_effort`）不写入请求体。
+ */
+internal val OPEN_AI_JSON: Json = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+    explicitNulls = false
+}
+
+/**
  * OpenAI 兼容 `/chat/completions` 客户端。
  *
  * 支持 SSE 流式增量返回；若服务端忽略 stream 参数直接返回完整 JSON，
@@ -41,11 +54,7 @@ private val JSON_MEDIA_TYPE = "application/json".toMediaType()
  */
 class OpenAiClient(private val client: OkHttpClient = defaultClient()) : ChatApi {
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        // 确保 stream=true 被写入请求体，而不是作为默认值被省略。
-        encodeDefaults = true
-    }
+    private val json = OPEN_AI_JSON
 
     /**
      * 发起一次聊天请求，并逐段返回模型输出文本。
@@ -57,6 +66,7 @@ class OpenAiClient(private val client: OkHttpClient = defaultClient()) : ChatApi
      * @param model 模型名。
      * @param messages 本次请求的完整消息列表。
      * @param temperature 采样温度。
+     * @param reasoningEffort 思考强度（`none`/`low`/`medium`/`high`），null 表示不发送该参数。
      * @return 增量文本流。
      * @throws ApiException 网络、HTTP 或解析错误。
      */
@@ -66,6 +76,7 @@ class OpenAiClient(private val client: OkHttpClient = defaultClient()) : ChatApi
         model: String,
         messages: List<ChatMessage>,
         temperature: Double,
+        reasoningEffort: String?,
     ): Flow<String> = flow {
         coroutineScope {
             // 阻塞读取放在 IO 协程中，通过 Channel 把增量送回 Flow 的收集上下文。
@@ -78,6 +89,7 @@ class OpenAiClient(private val client: OkHttpClient = defaultClient()) : ChatApi
                         model = model,
                         messages = messages,
                         temperature = temperature,
+                        reasoningEffort = reasoningEffort,
                         chunks = chunks,
                     )
                     chunks.close()
@@ -104,6 +116,7 @@ class OpenAiClient(private val client: OkHttpClient = defaultClient()) : ChatApi
         model: String,
         messages: List<ChatMessage>,
         temperature: Double,
+        reasoningEffort: String?,
         chunks: SendChannel<String>,
     ) {
         withContext(Dispatchers.IO) {
@@ -114,6 +127,7 @@ class OpenAiClient(private val client: OkHttpClient = defaultClient()) : ChatApi
                     model = model,
                     messages = messages,
                     temperature = temperature,
+                    reasoningEffort = reasoningEffort,
                 )
                 val call = client.newCall(request)
                 // 取消收集时主动取消 OkHttp 调用，避免阻塞在未设置超时的读取上。
@@ -184,6 +198,7 @@ class OpenAiClient(private val client: OkHttpClient = defaultClient()) : ChatApi
         model: String,
         messages: List<ChatMessage>,
         temperature: Double,
+        reasoningEffort: String?,
     ): Request {
         val url = baseUrl.trimEnd('/') + "/chat/completions"
         val payload = json.encodeToString(
@@ -192,6 +207,7 @@ class OpenAiClient(private val client: OkHttpClient = defaultClient()) : ChatApi
                 messages = messages,
                 stream = true,
                 temperature = temperature,
+                reasoningEffort = reasoningEffort,
             ),
         )
         return Request.Builder()

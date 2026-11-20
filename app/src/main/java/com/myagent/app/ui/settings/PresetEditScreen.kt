@@ -1,6 +1,7 @@
 package com.myagent.app.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +11,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,6 +67,9 @@ fun PresetEditScreen(onBack: () -> Unit) {
     var model by rememberSaveable { mutableStateOf("") }
     var apiKey by rememberSaveable { mutableStateOf("") }
     var apiKeyVisible by rememberSaveable { mutableStateOf(false) }
+    // 思考强度：空串表示"不设置"（不发送 reasoning_effort 参数）。
+    var reasoningEffort by rememberSaveable { mutableStateOf("") }
+    var effortMenuExpanded by remember { mutableStateOf(false) }
     var initialized by rememberSaveable { mutableStateOf(false) }
 
     // 已有预设加载完成后只回填一次，避免覆盖用户正在编辑的内容。
@@ -73,6 +79,7 @@ fun PresetEditScreen(onBack: () -> Unit) {
             name = loaded.name
             baseUrl = loaded.baseUrl
             model = loaded.model
+            reasoningEffort = loaded.reasoningEffort.orEmpty()
             initialized = true
         }
     }
@@ -145,6 +152,41 @@ fun PresetEditScreen(onBack: () -> Unit) {
                 placeholder = { Text("gpt-4o-mini") },
                 singleLine = true,
             )
+            // 思考强度（DeepSeek reasoning_effort）：不设置 / 不思考 / 低 / 中 / 高。
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = reasoningEffortLabel(reasoningEffort.ifBlank { null }),
+                    onValueChange = {},
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("思考强度") },
+                    readOnly = true,
+                    singleLine = true,
+                    trailingIcon = {
+                        TextButton(onClick = { effortMenuExpanded = true }) {
+                            Text("选择")
+                        }
+                    },
+                )
+                DropdownMenu(
+                    expanded = effortMenuExpanded,
+                    onDismissRequest = { effortMenuExpanded = false },
+                ) {
+                    REASONING_EFFORT_OPTIONS.forEach { (value, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                reasoningEffort = value.orEmpty()
+                                effortMenuExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+            Text(
+                text = "思考强度仅对支持 reasoning_effort 的模型生效；选择\"不设置\"则请求中不携带该参数。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Button(
                 onClick = {
                     if (name.isBlank() || baseUrl.isBlank() || model.isBlank()) {
@@ -157,6 +199,7 @@ fun PresetEditScreen(onBack: () -> Unit) {
                             baseUrl = baseUrl,
                             apiKeyPlain = apiKey,
                             model = model,
+                            reasoningEffort = reasoningEffort.ifBlank { null },
                             onSaved = onBack,
                         )
                     }

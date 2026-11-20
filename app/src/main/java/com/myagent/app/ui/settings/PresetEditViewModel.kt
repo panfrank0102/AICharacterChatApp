@@ -44,6 +44,7 @@ class PresetEditViewModel(
      * 保存预设。
      *
      * [apiKeyPlain] 留空时仓库会自动保留已有预设的旧密文，因此编辑时无需回填明文。
+     * [reasoningEffort] 为思考强度（`none`/`low`/`medium`/`high`），null 表示不设置（不发送该参数）。
      *
      * @param onSaved 保存成功后的回调（通常用于返回上一页）。
      */
@@ -52,6 +53,7 @@ class PresetEditViewModel(
         baseUrl: String,
         apiKeyPlain: String,
         model: String,
+        reasoningEffort: String?,
         onSaved: () -> Unit,
     ) {
         viewModelScope.launch {
@@ -61,6 +63,7 @@ class PresetEditViewModel(
                 baseUrl = baseUrl.trim(),
                 apiKeyPlain = apiKeyPlain,
                 model = model.trim(),
+                reasoningEffort = reasoningEffort,
             )
             onSaved()
         }

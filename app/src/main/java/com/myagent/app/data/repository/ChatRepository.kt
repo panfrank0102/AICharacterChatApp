@@ -146,6 +146,7 @@ class ChatRepository(
                 preset.model,
                 messages,
                 snapshot.temperature.toDouble(),
+                preset.reasoningEffort,
             ).collect { delta ->
                 full.append(delta)
                 emit(delta)
