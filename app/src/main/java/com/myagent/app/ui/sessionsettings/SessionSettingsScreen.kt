@@ -103,6 +103,15 @@ fun SessionSettingsScreen(
     val depthValue = draggingDepth
         ?: (conversation?.recursionDepth ?: DEFAULT_RECURSION_DEPTH).toFloat()
 
+    var userNameText by rememberSaveable { mutableStateOf("") }
+    var userNameFieldFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(conversation?.userName) {
+        conversation?.userName?.let { name -> userNameText = name }
+    }
+    val commitUserName: () -> Unit = {
+        vm.setUserName(userNameText)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -178,6 +187,35 @@ fun SessionSettingsScreen(
             HorizontalDivider()
             Spacer(Modifier.height(12.dp))
 
+            Text("用户称呼（{{user}}）", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "发送消息时，提示词与聊天记录中的 {{user}} 会被替换为这里的称呼",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = userNameText,
+                    onValueChange = { input -> userNameText = input.take(30) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .onFocusChanged { focusState ->
+                            if (userNameFieldFocused && !focusState.isFocused) {
+                                commitUserName()
+                            }
+                            userNameFieldFocused = focusState.isFocused
+                        },
+                    singleLine = true,
+                    placeholder = { Text("用户") },
+                )
+                TextButton(onClick = commitUserName) {
+                    Text("保存")
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
             Text("世界书扫描条数", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
             Text(

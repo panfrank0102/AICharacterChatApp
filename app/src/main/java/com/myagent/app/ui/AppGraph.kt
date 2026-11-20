@@ -3,6 +3,7 @@ package com.myagent.app.ui
 import com.myagent.app.data.db.AppDatabase
 import com.myagent.app.data.prefs.ApiKeyCrypto
 import com.myagent.app.data.repository.ChatRepository
+import com.myagent.app.data.repository.CharacterCardImporter
 import com.myagent.app.data.repository.ConversationRepository
 import com.myagent.app.data.repository.DataStoreSettingsRepository
 import com.myagent.app.data.repository.MessageRepository
@@ -50,6 +51,15 @@ object AppGraph {
             settings = settingsRepository,
             api = chatApi,
             keyDecryptor = ApiKeyCrypto::decrypt,
+        )
+    }
+
+    /** 角色卡导入器。 */
+    val characterCardImporter: CharacterCardImporter by lazy {
+        CharacterCardImporter(
+            conversationRepository = conversationRepository,
+            worldbookRepository = worldbookRepository,
+            messageRepository = messageRepository,
         )
     }
 }

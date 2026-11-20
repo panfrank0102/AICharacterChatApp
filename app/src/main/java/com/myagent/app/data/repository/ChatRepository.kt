@@ -136,6 +136,11 @@ class ChatRepository(
             contextLimitChars = snapshot.contextLimitChars,
         )
 
+        // 发送前把 {{user}} 宏替换为会话设置中的用户称呼（角色卡导入的提示词/世界书/开场白保留原样宏）。
+        val finalMessages = messages.map { message ->
+            message.copy(content = message.content.replace("{{user}}", conversation.userName))
+        }
+
         // 流式请求并逐段转发；无论成功、取消还是失败，只要已有内容就落库。
         val full = StringBuilder()
         var saved = false
@@ -144,7 +149,7 @@ class ChatRepository(
                 preset.baseUrl,
                 apiKey,
                 preset.model,
-                messages,
+                finalMessages,
                 snapshot.temperature.toDouble(),
                 preset.reasoningEffort,
             ).collect { delta ->

@@ -21,3 +21,6 @@ deps_download.log
 /ui.xml
 /ui_smoke.ps1
 /verify_reasoning.ps1
+/verify_import.ps1
+/card_export.json
+/艾诺迪亚大陆.png

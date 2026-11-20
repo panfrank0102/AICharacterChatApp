@@ -23,6 +23,7 @@ class ConversationRepository(private val dao: ConversationDao) {
     /**
      * 新建会话，创建时间与更新时间均取当前时刻。
      *
+     * @param userName 发送消息时替换 `{{user}}` 宏所用的用户称呼。
      * @return 新会话 id。
      */
     suspend fun create(
@@ -31,6 +32,7 @@ class ConversationRepository(private val dao: ConversationDao) {
         systemPrompt: String = "",
         scanCount: Int = 20,
         recursionDepth: Int = 2,
+        userName: String = "用户",
     ): Long {
         val now = System.currentTimeMillis()
         return dao.insert(
@@ -40,6 +42,7 @@ class ConversationRepository(private val dao: ConversationDao) {
                 systemPrompt = systemPrompt,
                 scanCount = scanCount,
                 recursionDepth = recursionDepth,
+                userName = userName,
                 createdAt = now,
                 updatedAt = now,
             ),
@@ -52,13 +55,14 @@ class ConversationRepository(private val dao: ConversationDao) {
         dao.update(existing.copy(title = title))
     }
 
-    /** 更新会话级设置（预设、提示词、扫描条数、递归深度）。 */
+    /** 更新会话级设置（预设、提示词、扫描条数、递归深度、用户称呼）。 */
     suspend fun updateSettings(
         id: Long,
         presetId: Long?,
         systemPrompt: String,
         scanCount: Int,
         recursionDepth: Int,
+        userName: String,
     ) {
         val existing = dao.getById(id) ?: return
         dao.update(
@@ -67,6 +71,7 @@ class ConversationRepository(private val dao: ConversationDao) {
                 systemPrompt = systemPrompt,
                 scanCount = scanCount,
                 recursionDepth = recursionDepth,
+                userName = userName,
             ),
         )
     }

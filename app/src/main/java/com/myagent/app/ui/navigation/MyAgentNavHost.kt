@@ -6,6 +6,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.myagent.app.ui.cardimport.CardImportScreen
 import com.myagent.app.ui.chat.ChatScreen
 import com.myagent.app.ui.conversationlist.ConversationListScreen
 import com.myagent.app.ui.sessionsettings.SessionSettingsScreen
@@ -28,6 +29,18 @@ fun MyAgentNavHost() {
             ConversationListScreen(
                 onOpenChat = { id -> navController.navigate(Routes.chat(id)) },
                 onOpenSettings = { navController.navigate(Routes.GLOBAL_SETTINGS) },
+                onImportCard = { navController.navigate(Routes.CARD_IMPORT) },
+            )
+        }
+
+        composable(Routes.CARD_IMPORT) {
+            CardImportScreen(
+                onBack = { navController.popBackStack() },
+                onImported = { id ->
+                    navController.navigate(Routes.chat(id)) {
+                        popUpTo(Routes.CONVERSATION_LIST) { inclusive = false }
+                    }
+                },
             )
         }
 

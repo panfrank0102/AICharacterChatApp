@@ -73,6 +73,16 @@ class SessionSettingsViewModel(
         updateSettings { it.copy(recursionDepth = clamped) }
     }
 
+    /**
+     * 设置发送消息时替换 `{{user}}` 宏所用的用户称呼。
+     *
+     * @param v 新的用户称呼，空白时回落到默认称呼"用户"。
+     */
+    fun setUserName(v: String) {
+        val name = v.trim().ifBlank { DEFAULT_USER_NAME }
+        updateSettings { it.copy(userName = name) }
+    }
+
     /** 先读取数据库中的最新会话，再只覆盖指定字段后写回，避免覆盖其他并发修改。 */
     private fun updateSettings(transform: (ConversationEntity) -> ConversationEntity) {
         viewModelScope.launch {
@@ -84,11 +94,15 @@ class SessionSettingsViewModel(
                 systemPrompt = updated.systemPrompt,
                 scanCount = updated.scanCount,
                 recursionDepth = updated.recursionDepth,
+                userName = updated.userName,
             )
         }
     }
 
     private companion object {
+
+        /** 用户称呼为空时的默认值，与数据库默认值一致。 */
+        const val DEFAULT_USER_NAME = "用户"
 
         /** 扫描条数下限。 */
         const val MIN_SCAN_COUNT = 0

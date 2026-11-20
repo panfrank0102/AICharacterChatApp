@@ -22,6 +22,9 @@ data class ConversationEntity(
     val scanCount: Int = 20,
     @ColumnInfo(name = "recursion_depth")
     val recursionDepth: Int = 2,
+    /** 发送消息时替换 `{{user}}` 宏所用的用户称呼。 */
+    @ColumnInfo(name = "user_name")
+    val userName: String = "用户",
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
     @ColumnInfo(name = "updated_at")

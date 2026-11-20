@@ -1,5 +1,7 @@
 package com.myagent.app.ui.conversationlist
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +27,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -37,29 +41,57 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.myagent.app.data.db.entity.ConversationEntity
+import com.myagent.app.domain.import.CharacterCardParser
+import com.myagent.app.ui.cardimport.ImportState
 import java.text.SimpleDateFormat
 import java.util.Date
 import kotlinx.coroutines.launch
 
 /**
- * 会话列表页：展示全部会话，支持新建、进入会话、长按重命名/删除，并提供全局设置入口。
+ * 会话列表页：展示全部会话，支持新建、进入会话、长按重命名/删除，并提供角色卡导入与全局设置入口。
  *
  * @param onOpenChat 打开指定会话的聊天页。
  * @param onOpenSettings 打开全局设置页。
+ * @param onImportCard 角色卡解析成功后跳转导入预览页。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationListScreen(
     onOpenChat: (Long) -> Unit,
     onOpenSettings: () -> Unit,
+    onImportCard: () -> Unit,
 ) {
     val vm: ConversationListViewModel = viewModel()
     val conversations by vm.conversations.collectAsState()
     val scope = rememberCoroutineScope()
     val timeFormat = remember { SimpleDateFormat("MM-dd HH:mm") }
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // 通过系统文件选择器读取角色卡（PNG 内嵌卡数据或 JSON 文件），解析成功后暂存卡片并跳转预览页。
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val bytes = runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { input -> input.readBytes() }
+                }.getOrNull()
+                if (bytes == null) {
+                    snackbarHostState.showSnackbar("读取文件失败")
+                    return@launch
+                }
+                val card = runCatching { CharacterCardParser.parse(bytes) }.getOrElse { e ->
+                    snackbarHostState.showSnackbar(e.message ?: "角色卡解析失败")
+                    return@launch
+                }
+                ImportState.pendingCard = card
+                onImportCard()
+            }
+        }
+    }
 
     var managedConversation by remember { mutableStateOf<ConversationEntity?>(null) }
     var renameConversation by remember { mutableStateOf<ConversationEntity?>(null) }
@@ -71,12 +103,18 @@ fun ConversationListScreen(
             TopAppBar(
                 title = { Text("MyAgent") },
                 actions = {
+                    TextButton(
+                        onClick = { importLauncher.launch(arrayOf("image/png", "application/json")) },
+                    ) {
+                        Text("导入")
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "设置")
                     }
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {

@@ -36,6 +36,9 @@ object Routes {
     /** 世界书条目编辑页（entryId = -1 表示新建）。 */
     const val WORLDBOOK_ENTRY_EDIT = "worldbookEntryEdit/{$ARG_CONVERSATION_ID}?$ARG_ENTRY_ID={$ARG_ENTRY_ID}"
 
+    /** 角色卡导入预览页。 */
+    const val CARD_IMPORT = "cardImport"
+
     fun chat(id: Long): String = "chat/$id"
 
     fun sessionSettings(id: Long): String = "sessionSettings/$id"

@@ -62,6 +62,7 @@ class PromptEditViewModel(
                     systemPrompt = text.value,
                     scanCount = conversation.scanCount,
                     recursionDepth = conversation.recursionDepth,
+                    userName = conversation.userName,
                 )
             }
             onSaved()
