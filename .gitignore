@@ -16,7 +16,7 @@ local.properties
 .gradle-home
 /API key.txt
 deps_download.log
-/emulator_verify*.png
+/png_example/
 /ui_*.png
 /ui.xml
 /ui_smoke.ps1
