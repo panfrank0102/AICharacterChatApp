@@ -42,12 +42,18 @@ fun PromptEditScreen(onBack: () -> Unit) {
     val title = when {
         vm.conversationId == null -> "全局提示词"
         vm.isPostHistory -> "后置提示词"
+        vm.isStatusBody -> "状态栏正文指令"
+        vm.isStatusBar -> "状态栏指令"
         else -> "会话提示词"
     }
-    val placeholder = if (vm.isPostHistory) {
-        "输入后置提示词（每轮插在对话历史之后的 system 指令，如输出格式/状态栏要求）…"
-    } else {
-        "输入人设/扮演规则等系统提示词…"
+    val placeholder = when {
+        vm.isPostHistory ->
+            "输入后置提示词（每轮插在对话历史之后的 system 指令，如输出格式/状态栏要求）…"
+        vm.isStatusBody ->
+            "输入正文请求的附加指令（要求模型只输出正文、不要输出状态栏；留空恢复默认）…"
+        vm.isStatusBar ->
+            "输入状态栏请求的附加指令（要求模型只输出更新后的 <StatusBlock>；留空恢复默认）…"
+        else -> "输入人设/扮演规则等系统提示词…"
     }
 
     Scaffold(

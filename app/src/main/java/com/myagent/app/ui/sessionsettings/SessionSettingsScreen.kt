@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -47,6 +48,7 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.myagent.app.domain.StatusBarInstructions
 import kotlin.math.roundToInt
 
 /** 扫描条数未加载时的兜底值，与需求文档的默认值一致。 */
@@ -61,13 +63,15 @@ private const val SCAN_COUNT_MAX_LENGTH = 3
 /**
  * 会话设置页。
  *
- * 展示并编辑当前会话的模型预设、前置/后置提示词入口、世界书入口、世界书扫描条数与递归深度；
- * 修改会即时写回数据库，从下一条消息起生效。
+ * 展示并编辑当前会话的模型预设、前置/后置提示词入口、世界书入口、世界书扫描条数与递归深度、
+ * 状态栏优化开关；修改会即时写回数据库，从下一条消息起生效。
  *
  * @param onBack 返回上一页。
  * @param onOpenPromptEdit 打开（前置）提示词编辑页，参数为会话 id。
  * @param onOpenPostHistoryEdit 打开后置提示词编辑页，参数为会话 id。
  * @param onOpenWorldbook 打开当前会话的世界书列表页。
+ * @param onOpenStatusBodyInstruction 打开状态栏优化·正文指令编辑页，参数为会话 id。
+ * @param onOpenStatusBarInstruction 打开状态栏优化·状态栏指令编辑页，参数为会话 id。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +80,8 @@ fun SessionSettingsScreen(
     onOpenPromptEdit: (Long) -> Unit,
     onOpenPostHistoryEdit: (Long) -> Unit,
     onOpenWorldbook: () -> Unit,
+    onOpenStatusBodyInstruction: (Long) -> Unit,
+    onOpenStatusBarInstruction: (Long) -> Unit,
 ) {
     val vm: SessionSettingsViewModel = viewModel(
         factory = viewModelFactory {
@@ -195,6 +201,61 @@ fun SessionSettingsScreen(
                 onClick = onOpenWorldbook,
             )
             HorizontalDivider()
+            Spacer(Modifier.height(12.dp))
+
+            // 状态栏优化
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("状态栏优化", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = "开启后：正文与状态栏分两次请求分别流式生成，" +
+                            "状态栏在正文完成后以面板形式填入气泡",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = conversation?.statusBarOptimization == true,
+                    onCheckedChange = { vm.setStatusBarOptimization(it) },
+                )
+            }
+            if (conversation?.statusBarOptimization == true) {
+                SettingsEntryRow(
+                    title = "正文指令",
+                    subtitle = truncate(
+                        text = resolveStatusBodyInstruction(
+                            conversation?.statusBodyInstruction.orEmpty(),
+                        ).ifBlank { "（使用默认指令）" },
+                        maxLength = 30,
+                    ),
+                    onClick = { onOpenStatusBodyInstruction(vm.conversationId) },
+                )
+                SettingsEntryRow(
+                    title = "状态栏指令",
+                    subtitle = truncate(
+                        text = resolveStatusBarInstruction(
+                            conversation?.statusBarInstruction.orEmpty(),
+                        ).ifBlank { "（使用默认指令）" },
+                        maxLength = 30,
+                    ),
+                    onClick = { onOpenStatusBarInstruction(vm.conversationId) },
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("状态栏请求强制不思考", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = "开启后状态栏请求使用\"不思考\"（预设未设置思考强度时不生效）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = conversation?.statusForceNoThinking == true,
+                        onCheckedChange = { vm.setStatusForceNoThinking(it) },
+                    )
+                }
+                HorizontalDivider()
+            }
             Spacer(Modifier.height(12.dp))
 
             Text("用户称呼（{{user}}）", style = MaterialTheme.typography.titleSmall)
@@ -317,3 +378,11 @@ private fun SettingsEntryRow(
 /** 把文本截断到 [maxLength] 个字符，超出时追加省略号。 */
 private fun truncate(text: String, maxLength: Int): String =
     if (text.length <= maxLength) text else text.take(maxLength) + "…"
+
+/** 解析状态栏优化·正文指令的展示文本：自定义为空时显示内置默认指令。 */
+private fun resolveStatusBodyInstruction(custom: String): String =
+    StatusBarInstructions.resolveBodyInstruction(custom)
+
+/** 解析状态栏优化·状态栏指令的展示文本：自定义为空时显示内置默认指令。 */
+private fun resolveStatusBarInstruction(custom: String): String =
+    StatusBarInstructions.resolveStatusInstruction(custom)

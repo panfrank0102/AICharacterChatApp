@@ -9,10 +9,12 @@ import com.myagent.app.data.db.entity.MessageEntity
 import com.myagent.app.data.db.entity.ModelPresetEntity
 import com.myagent.app.data.db.entity.WorldBookEntryEntity
 import com.myagent.app.data.prefs.SettingsDataStore
+import com.myagent.app.domain.StatusBarInstructions
 import com.myagent.app.network.ApiException
 import com.myagent.app.network.ChatApi
 import com.myagent.app.network.Kind
 import com.myagent.app.network.dto.ChatMessage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
@@ -40,20 +42,25 @@ class ChatRepositoryTest {
     private val worldBookDao = FakeWorldBookDao()
     private val presetDao = FakePresetDao()
 
+    // ---------------------------------------------------------------------
+    // 普通路径
+    // ---------------------------------------------------------------------
+
     @Test
     fun sendMessage_persistsMessagesAndAssemblesRequestInOrder() = runBlocking {
         seedConversation(systemPrompt = "会话人设")
         seedPreset()
         messageDao.seed(conversationId = CONVERSATION_ID, role = "user", content = "旧问题")
         messageDao.seed(conversationId = CONVERSATION_ID, role = "assistant", content = "旧回答")
-        val api = FakeChatApi(chunks = listOf("你", "好"))
+        val api = FakeChatApi().apply { enqueue(chunks = listOf("你", "好")) }
 
-        val deltas = repository(
+        val events = repository(
             api = api,
             settings = SettingsDataStore.AppSettings(globalPrompt = "全局人设"),
         ).sendMessage(CONVERSATION_ID, "你好呀").toList()
 
-        assertEquals(listOf("你", "好"), deltas)
+        assertEquals(listOf("你", "好"), bodyDeltas(events))
+        assertEquals(ChatStreamEvent.Completed, events.last())
 
         val stored = messageDao.all(CONVERSATION_ID)
         assertEquals(4, stored.size)
@@ -108,7 +115,7 @@ class ChatRepositoryTest {
             priority = 99,
             enabled = false,
         )
-        val api = FakeChatApi(chunks = listOf("好"))
+        val api = FakeChatApi().apply { enqueue(chunks = listOf("好")) }
 
         repository(
             api = api,
@@ -134,7 +141,7 @@ class ChatRepositoryTest {
     @Test
     fun sendMessage_withoutPreset_throwsAndKeepsUserMessage() = runBlocking {
         seedConversation(presetId = null)
-        val api = FakeChatApi(chunks = listOf("不应出现"))
+        val api = FakeChatApi().apply { enqueue(chunks = listOf("不应出现")) }
         val chatRepository = repository(api = api)
 
         val error = assertThrowsBlocking(IllegalStateException::class.java) {
@@ -153,7 +160,9 @@ class ChatRepositoryTest {
     fun sendMessage_whenApiFailsWithoutOutput_doesNotPersistAssistantMessage() = runBlocking {
         seedConversation()
         seedPreset()
-        val api = FakeChatApi(failure = ApiException(Kind.NETWORK, "网络错误"))
+        val api = FakeChatApi().apply {
+            enqueue(failure = ApiException(Kind.NETWORK, "网络错误"))
+        }
 
         val error = assertThrowsBlocking(ApiException::class.java) {
             repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
@@ -170,10 +179,12 @@ class ChatRepositoryTest {
     fun sendMessage_whenApiFailsAfterPartialOutput_persistsPartialAssistantMessage() = runBlocking {
         seedConversation()
         seedPreset()
-        val api = FakeChatApi(
-            chunks = listOf("部分", "内容"),
-            failure = ApiException(Kind.SERVER, "服务端错误"),
-        )
+        val api = FakeChatApi().apply {
+            enqueue(
+                chunks = listOf("部分", "内容"),
+                failure = ApiException(Kind.SERVER, "服务端错误"),
+            )
+        }
 
         assertThrowsBlocking(ApiException::class.java) {
             repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
@@ -192,7 +203,7 @@ class ChatRepositoryTest {
         seedPreset()
         messageDao.seed(conversationId = CONVERSATION_ID, role = "user", content = "第一次提问")
         messageDao.seed(conversationId = CONVERSATION_ID, role = "assistant", content = "旧回复")
-        val api = FakeChatApi(chunks = listOf("新回复"))
+        val api = FakeChatApi().apply { enqueue(chunks = listOf("新回复")) }
 
         repository(api = api).regenerate(CONVERSATION_ID).toList()
 
@@ -212,7 +223,7 @@ class ChatRepositoryTest {
         seedConversation(title = "")
         seedPreset()
         val userText = "这是一个超过二十个字符的非常长的用户消息内容用于测试标题自动生成"
-        val api = FakeChatApi(chunks = listOf("回复"))
+        val api = FakeChatApi().apply { enqueue(chunks = listOf("回复")) }
 
         repository(api = api).sendMessage(CONVERSATION_ID, userText).toList()
 
@@ -225,7 +236,7 @@ class ChatRepositoryTest {
     fun sendMessage_passesReasoningEffortFromPreset() = runBlocking {
         seedConversation()
         seedPreset(reasoningEffort = "medium")
-        val api = FakeChatApi(chunks = listOf("好"))
+        val api = FakeChatApi().apply { enqueue(chunks = listOf("好")) }
 
         repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
 
@@ -236,7 +247,7 @@ class ChatRepositoryTest {
     fun sendMessage_withoutReasoningEffort_passesNull() = runBlocking {
         seedConversation()
         seedPreset(reasoningEffort = null)
-        val api = FakeChatApi(chunks = listOf("好"))
+        val api = FakeChatApi().apply { enqueue(chunks = listOf("好")) }
 
         repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
 
@@ -249,7 +260,7 @@ class ChatRepositoryTest {
         seedPreset(reasoningEffort = "none")
         messageDao.seed(conversationId = CONVERSATION_ID, role = "user", content = "第一次提问")
         messageDao.seed(conversationId = CONVERSATION_ID, role = "assistant", content = "旧回复")
-        val api = FakeChatApi(chunks = listOf("新回复"))
+        val api = FakeChatApi().apply { enqueue(chunks = listOf("新回复")) }
 
         repository(api = api).regenerate(CONVERSATION_ID).toList()
 
@@ -260,7 +271,7 @@ class ChatRepositoryTest {
     fun sendMessage_includesSessionPostHistoryPromptAsLastSystemMessage() = runBlocking {
         seedConversation(systemPrompt = "会话人设", postHistoryPrompt = "把{{user}}称作队长，并输出状态栏")
         seedPreset()
-        val api = FakeChatApi(chunks = listOf("好"))
+        val api = FakeChatApi().apply { enqueue(chunks = listOf("好")) }
 
         repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
 
@@ -274,8 +285,255 @@ class ChatRepositoryTest {
     }
 
     // ---------------------------------------------------------------------
+    // 状态栏优化
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun sendMessage_statusOptimization_twoRequestsAndMergedMessage() = runBlocking {
+        seedConversation(statusBarOptimization = true)
+        seedPreset()
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("你", "好"))
+            enqueue(
+                chunks = listOf(
+                    "<StatusBlock>",
+                    "<details><summary>世界信息</summary>```",
+                    "☁️天空：晴朗```</details>",
+                    "</StatusBlock>",
+                ),
+            )
+        }
+
+        val events = repository(api = api).sendMessage(CONVERSATION_ID, "你好呀").toList()
+
+        assertEquals(listOf("你", "好"), bodyDeltas(events))
+        assertEquals(ChatStreamEvent.StatusStarted, events[2])
+        assertEquals(
+            listOf(
+                "<StatusBlock>",
+                "<details><summary>世界信息</summary>```",
+                "☁️天空：晴朗```</details>",
+                "</StatusBlock>",
+            ),
+            events.filterIsInstance<ChatStreamEvent.StatusDelta>().map { it.text },
+        )
+        assertEquals(ChatStreamEvent.Completed, events.last())
+
+        // 两次请求：正文请求末尾附"只输出正文"指令；状态栏请求末尾附正文与"只输出状态栏"指令。
+        assertEquals(2, api.requests.size)
+        val bodyRequest = api.requests[0]
+        val statusRequest = api.requests[1]
+        assertEquals("system", bodyRequest.messages.last().role)
+        assertEquals(StatusBarInstructions.DEFAULT_BODY_INSTRUCTION, bodyRequest.messages.last().content)
+        assertEquals("assistant", statusRequest.messages[statusRequest.messages.size - 2].role)
+        assertEquals("你好", statusRequest.messages[statusRequest.messages.size - 2].content)
+        assertEquals("system", statusRequest.messages.last().role)
+        assertEquals(StatusBarInstructions.DEFAULT_STATUS_INSTRUCTION, statusRequest.messages.last().content)
+
+        // 正文与状态栏合并为一条消息。
+        val stored = messageDao.all(CONVERSATION_ID)
+        assertEquals(2, stored.size)
+        assertEquals(
+            "你好\n\n<StatusBlock><details><summary>世界信息</summary>```☁️天空：晴朗```</details></StatusBlock>",
+            stored[1].content,
+        )
+    }
+
+    @Test
+    fun sendMessage_statusOptimization_stripsStatusFromBody() = runBlocking {
+        seedConversation(statusBarOptimization = true)
+        seedPreset()
+        val api = FakeChatApi().apply {
+            // 正文违反指令带出了状态栏：应被剔除，且仍照常发起状态栏请求。
+            enqueue(
+                chunks = listOf(
+                    "正文你好",
+                    "<StatusBlock><details><summary>违规</summary>```BODY_STATUS_XYZ```</details></StatusBlock>",
+                ),
+            )
+            enqueue(
+                chunks = listOf(
+                    "<StatusBlock><details><summary>s</summary>```APPENDED_STATUS_XYZ```</details></StatusBlock>",
+                ),
+            )
+        }
+
+        val events = repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        assertEquals(listOf("正文你好"), bodyDeltas(events))
+        assertEquals(2, api.requests.size)
+        assertEquals("正文你好", api.requests[1].messages[api.requests[1].messages.size - 2].content)
+
+        val stored = messageDao.all(CONVERSATION_ID)
+        assertEquals(2, stored.size)
+        assertFalse("正文中的状态栏应被剔除", stored[1].content.contains("BODY_STATUS_XYZ"))
+        assertTrue("追加的状态栏应保留", stored[1].content.contains("APPENDED_STATUS_XYZ"))
+        assertTrue(stored[1].content.startsWith("正文你好"))
+    }
+
+    @Test
+    fun sendMessage_statusRequestFailure_keepsBodyAndEmitsStatusFailed() = runBlocking {
+        seedConversation(statusBarOptimization = true)
+        seedPreset()
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文"))
+            enqueue(chunks = listOf("<StatusBlock><details><summary>s</summary>"), failure = ApiException(Kind.SERVER, "挂了"))
+        }
+
+        val events = repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        assertEquals("正文", bodyDeltas(events).joinToString(""))
+        assertTrue(events.filterIsInstance<ChatStreamEvent.StatusFailed>().isNotEmpty())
+        assertEquals(ChatStreamEvent.Completed, events.last())
+
+        val stored = messageDao.all(CONVERSATION_ID)
+        assertEquals(2, stored.size)
+        assertEquals("正文", stored[1].content)
+    }
+
+    @Test
+    fun sendMessage_statusInvalidContent_keepsBodyAndEmitsStatusFailed() = runBlocking {
+        seedConversation(statusBarOptimization = true)
+        seedPreset()
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文"))
+            enqueue(chunks = listOf("抱歉，我无法生成状态栏"))
+        }
+
+        val events = repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        val failure = events.filterIsInstance<ChatStreamEvent.StatusFailed>().single()
+        assertTrue(failure.userMessage.contains("状态栏更新失败"))
+        val stored = messageDao.all(CONVERSATION_ID)
+        assertEquals("正文", stored[1].content)
+    }
+
+    @Test
+    fun sendMessage_statusCancelled_keepsPartialStatusAndBody() {
+        seedConversation(statusBarOptimization = true)
+        seedPreset()
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文"))
+            enqueue(
+                chunks = listOf("<StatusBlock><details><summary>世界"),
+                failure = CancellationException("cancelled"),
+            )
+        }
+
+        assertThrows(CancellationException::class.java) {
+            runBlocking { repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList() }
+        }
+
+        val stored = messageDao.all(CONVERSATION_ID)
+        assertEquals(2, stored.size)
+        assertTrue("正文应保留", stored[1].content.startsWith("正文"))
+        assertTrue("部分状态栏应被保留并自动闭合", stored[1].content.contains("<StatusBlock>"))
+        assertTrue(stored[1].content.endsWith("</StatusBlock>"))
+    }
+
+    @Test
+    fun sendMessage_statusCancelledWithNoContent_keepsBodyOnly() {
+        seedConversation(statusBarOptimization = true)
+        seedPreset()
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文"))
+            enqueue(chunks = emptyList(), failure = CancellationException("cancelled"))
+        }
+
+        assertThrows(CancellationException::class.java) {
+            runBlocking { repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList() }
+        }
+
+        val stored = messageDao.all(CONVERSATION_ID)
+        assertEquals(2, stored.size)
+        assertEquals("正文", stored[1].content)
+    }
+
+    @Test
+    fun sendMessage_forceNoThinking_usesNoneWhenPresetHasEffort() = runBlocking {
+        seedConversation(statusBarOptimization = true, statusForceNoThinking = true)
+        seedPreset(reasoningEffort = "high")
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文"))
+            enqueue(chunks = listOf("<StatusBlock><details><summary>s</summary>```v```</details></StatusBlock>"))
+        }
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        assertEquals("high", api.requests[0].reasoningEffort)
+        assertEquals("none", api.requests[1].reasoningEffort)
+    }
+
+    @Test
+    fun sendMessage_forceNoThinking_keepsNullWhenPresetUnset() = runBlocking {
+        seedConversation(statusBarOptimization = true, statusForceNoThinking = true)
+        seedPreset(reasoningEffort = null)
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文"))
+            enqueue(chunks = listOf("<StatusBlock><details><summary>s</summary>```v```</details></StatusBlock>"))
+        }
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        // 预设未设置思考强度时，强制不思考也不发送该参数（兼容不支持该参数的模型）。
+        assertNull(api.requests[1].reasoningEffort)
+    }
+
+    @Test
+    fun sendMessage_forceNoThinkingOff_followsPreset() = runBlocking {
+        seedConversation(statusBarOptimization = true, statusForceNoThinking = false)
+        seedPreset(reasoningEffort = "high")
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文"))
+            enqueue(chunks = listOf("<StatusBlock><details><summary>s</summary>```v```</details></StatusBlock>"))
+        }
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        assertEquals("high", api.requests[1].reasoningEffort)
+    }
+
+    @Test
+    fun sendMessage_customInstructions_usedInRequests() = runBlocking {
+        seedConversation(
+            statusBarOptimization = true,
+            statusBodyInstruction = "自定义正文指令",
+            statusBarInstruction = "自定义状态栏指令",
+        )
+        seedPreset()
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文"))
+            enqueue(chunks = listOf("<StatusBlock><details><summary>s</summary>```v```</details></StatusBlock>"))
+        }
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        assertEquals("自定义正文指令", api.requests[0].messages.last().content)
+        assertEquals("自定义状态栏指令", api.requests[1].messages.last().content)
+    }
+
+    @Test
+    fun sendMessage_optimizationOff_singleRequestWithoutStatusEvents() = runBlocking {
+        seedConversation(statusBarOptimization = false)
+        seedPreset()
+        val api = FakeChatApi().apply { enqueue(chunks = listOf("正文")) }
+
+        val events = repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        assertEquals(1, api.requests.size)
+        assertTrue(events.none { it is ChatStreamEvent.StatusStarted })
+        assertTrue(events.none { it is ChatStreamEvent.StatusDelta })
+        assertEquals("正文", bodyDeltas(events).joinToString(""))
+        // 未开启优化时正文请求末尾不附加指令。
+        assertEquals("user", api.requests[0].messages.last().role)
+    }
+
+    // ---------------------------------------------------------------------
     // 测试辅助
     // ---------------------------------------------------------------------
+
+    private fun bodyDeltas(events: List<ChatStreamEvent>): List<String> =
+        events.filterIsInstance<ChatStreamEvent.BodyDelta>().map { it.text }
 
     private fun repository(
         api: ChatApi,
@@ -298,6 +556,11 @@ class ChatRepositoryTest {
         postHistoryPrompt: String = "",
         scanCount: Int = 20,
         recursionDepth: Int = 2,
+        userName: String = "用户",
+        statusBarOptimization: Boolean = false,
+        statusBodyInstruction: String = "",
+        statusBarInstruction: String = "",
+        statusForceNoThinking: Boolean = false,
     ) {
         conversationDao.seed(
             ConversationEntity(
@@ -308,6 +571,11 @@ class ChatRepositoryTest {
                 postHistoryPrompt = postHistoryPrompt,
                 scanCount = scanCount,
                 recursionDepth = recursionDepth,
+                userName = userName,
+                statusBarOptimization = statusBarOptimization,
+                statusBodyInstruction = statusBodyInstruction,
+                statusBarInstruction = statusBarInstruction,
+                statusForceNoThinking = statusForceNoThinking,
                 createdAt = 0L,
                 updatedAt = 0L,
             ),
@@ -565,13 +833,16 @@ private class FakeSettingsRepository(
     override suspend fun setDefaultPresetId(v: Long?) = Unit
 }
 
-/** 记录请求参数、按预设脚本产出增量或抛出异常的假 [ChatApi]。 */
-private class FakeChatApi(
-    private val chunks: List<String> = emptyList(),
-    private val failure: Exception? = null,
-) : ChatApi {
+/** 按队列依次响应、记录请求参数的假 [ChatApi]。 */
+private class FakeChatApi : ChatApi {
 
     val requests = mutableListOf<RecordedRequest>()
+    private val responses = ArrayDeque<Pair<List<String>, Exception?>>()
+
+    /** 追加一次响应：先发完 [chunks] 再抛出 [failure]（可为 null）。 */
+    fun enqueue(chunks: List<String> = emptyList(), failure: Exception? = null) {
+        responses.addLast(chunks to failure)
+    }
 
     override fun chatStream(
         baseUrl: String,
@@ -582,6 +853,7 @@ private class FakeChatApi(
         reasoningEffort: String?,
     ): Flow<String> = flow {
         requests.add(RecordedRequest(baseUrl, apiKey, model, messages, temperature, reasoningEffort))
+        val (chunks, failure) = if (responses.isEmpty()) emptyList<String>() to null else responses.removeFirst()
         for (chunk in chunks) {
             emit(chunk)
         }

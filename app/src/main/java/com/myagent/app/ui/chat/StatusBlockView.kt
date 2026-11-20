@@ -31,6 +31,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.myagent.app.domain.statusbar.ChatContentBlock
+import com.myagent.app.domain.statusbar.StatusBlockParser
+import com.myagent.app.domain.statusbar.StatusPart
+import com.myagent.app.domain.statusbar.StatusSection
 
 /** 状态栏正文使用的行高，比默认 bodySmall 稍大，便于阅读多行文本。 */
 private val PanelBodyLineHeight = 18.sp
@@ -42,10 +46,16 @@ private val PanelBodyLineHeight = 18.sp
  * 未闭合或无法识别的标记会退化为普通文本，保证不丢内容。
  *
  * @param content 消息原文。
+ * @param streamingStatusText 状态栏优化中尚未完成的流式状态栏原文；
+ * 非空时在正文后渐进渲染状态栏面板（收到开标签即建面板、内容随流填充、结束标签不显示）。
  * @param modifier 作用于整个内容列的修饰符（例如气泡内边距）。
  */
 @Composable
-internal fun ChatMessageContent(content: String, modifier: Modifier = Modifier) {
+internal fun ChatMessageContent(
+    content: String,
+    streamingStatusText: String = "",
+    modifier: Modifier = Modifier,
+) {
     val blocks = remember(content) { StatusBlockParser.parse(content) }
     Column(
         modifier = modifier,
@@ -61,18 +71,40 @@ internal fun ChatMessageContent(content: String, modifier: Modifier = Modifier) 
                 is ChatContentBlock.StatusPanel -> StatusPanelCard(panel = block)
             }
         }
+        if (streamingStatusText.isNotEmpty()) {
+            StreamingStatusPanel(statusText = streamingStatusText)
+        }
     }
+}
+
+/**
+ * 状态栏优化·流式阶段的状态栏面板：
+ * 一旦收到 `<StatusBlock>` 开标签即渲染面板（空面板也显示"状态栏（更新中…）"标题），
+ * 分区与内容随增量持续填充；`</StatusBlock>` 不显示。
+ */
+@Composable
+private fun StreamingStatusPanel(statusText: String) {
+    val sections = remember(statusText) { StatusBlockParser.parseStreamingStatus(statusText) }
+    if (!StatusBlockParser.isStatusBlockStarted(statusText)) return
+    StatusPanelCard(
+        panel = ChatContentBlock.StatusPanel(sections),
+        streaming = true,
+    )
 }
 
 /**
  * 状态栏卡片：标题行点击可折叠整块，默认展开。
  *
  * @param panel 已解析出的状态栏面板数据。
+ * @param streaming 是否处于流式填充中（标题附带"更新中"提示；空面板也渲染）。
  */
 @Composable
-private fun StatusPanelCard(panel: ChatContentBlock.StatusPanel) {
-    // 防御：没有分区时不渲染任何内容。
-    if (panel.sections.isEmpty()) return
+private fun StatusPanelCard(
+    panel: ChatContentBlock.StatusPanel,
+    streaming: Boolean = false,
+) {
+    // 防御：静态渲染时没有分区不渲染；流式中空面板也要先显示框架。
+    if (panel.sections.isEmpty() && !streaming) return
 
     var expanded by rememberSaveable { mutableStateOf(true) }
     val shape = RoundedCornerShape(8.dp)
@@ -96,7 +128,7 @@ private fun StatusPanelCard(panel: ChatContentBlock.StatusPanel) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "状态栏",
+                    text = if (streaming) "状态栏（更新中…）" else "状态栏",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,

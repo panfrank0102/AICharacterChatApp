@@ -23,6 +23,8 @@ deps_download.log
 /verify_reasoning.ps1
 /verify_import.ps1
 /verify_status.ps1
+/verify_status_opt.ps1
+/verify_send.ps1
 /inspect_db.py
 /myagent_dump.db
 /db_myagent.db

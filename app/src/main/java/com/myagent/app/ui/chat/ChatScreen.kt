@@ -92,6 +92,7 @@ fun ChatScreen(
     val inputText by vm.inputText.collectAsState()
     val streaming by vm.streaming.collectAsState()
     val streamingText by vm.streamingText.collectAsState()
+    val statusStreamText by vm.statusStreamText.collectAsState()
     val error by vm.error.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -150,6 +151,7 @@ fun ChatScreen(
                     item(key = STREAMING_ITEM_KEY) {
                         MessageBubble(
                             content = streamingText + "▌",
+                            streamingStatusText = statusStreamText,
                             isUser = false,
                             showRegenerate = false,
                             onLongClick = {},
@@ -220,6 +222,7 @@ fun ChatScreen(
  * 最后一条 AI 回复额外显示「重新生成」。
  *
  * @param content 气泡正文。
+ * @param streamingStatusText 状态栏优化·流式阶段的状态栏原文（非空时渐进渲染面板）。
  * @param isUser 是否为用户消息（决定对齐方式与配色）。
  * @param showRegenerate 是否显示「重新生成」按钮。
  * @param onLongClick 长按气泡的回调（复制内容）。
@@ -235,6 +238,7 @@ private fun MessageBubble(
     onLongClick: () -> Unit,
     onDelete: (() -> Unit)?,
     onRegenerate: () -> Unit,
+    streamingStatusText: String = "",
 ) {
     val bubbleColor = if (isUser) {
         MaterialTheme.colorScheme.primaryContainer
@@ -266,6 +270,7 @@ private fun MessageBubble(
         ) {
             ChatMessageContent(
                 content = content,
+                streamingStatusText = streamingStatusText,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }

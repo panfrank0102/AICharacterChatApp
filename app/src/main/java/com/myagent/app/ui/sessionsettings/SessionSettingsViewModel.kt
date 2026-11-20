@@ -83,6 +83,25 @@ class SessionSettingsViewModel(
         updateSettings { it.copy(userName = name) }
     }
 
+    /**
+     * 开关「状态栏优化」（正文与状态栏分两次请求分别流式生成）。
+     *
+     * @param v true 表示开启；关闭时子设置（指令与强制不思考）保留原值，便于再次开启。
+     */
+    fun setStatusBarOptimization(v: Boolean) {
+        updateSettings { it.copy(statusBarOptimization = v) }
+    }
+
+    /**
+     * 开关「状态栏请求强制不思考」。
+     *
+     * @param v true 表示状态栏请求在预设已设置思考强度时强制使用"不思考"；
+     * 预设本身未设置思考强度时该开关不生效。
+     */
+    fun setStatusForceNoThinking(v: Boolean) {
+        updateSettings { it.copy(statusForceNoThinking = v) }
+    }
+
     /** 先读取数据库中的最新会话，再只覆盖指定字段后写回，避免覆盖其他并发修改。 */
     private fun updateSettings(transform: (ConversationEntity) -> ConversationEntity) {
         viewModelScope.launch {
@@ -96,6 +115,10 @@ class SessionSettingsViewModel(
                 scanCount = updated.scanCount,
                 recursionDepth = updated.recursionDepth,
                 userName = updated.userName,
+                statusBarOptimization = updated.statusBarOptimization,
+                statusBodyInstruction = updated.statusBodyInstruction,
+                statusBarInstruction = updated.statusBarInstruction,
+                statusForceNoThinking = updated.statusForceNoThinking,
             )
         }
     }

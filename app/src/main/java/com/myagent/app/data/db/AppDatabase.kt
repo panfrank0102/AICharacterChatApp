@@ -19,8 +19,8 @@ import com.myagent.app.data.db.entity.WorldBookEntryEntity
  * 应用本地数据库（Room）。
  *
  * 需在 Application 中调用 [init] 完成初始化，之后通过 [instance] 获取单例。
- * 已提供 1→2（模型预设新增思考强度字段）、2→3（会话新增用户称呼字段）
- * 与 3→4（会话新增后置提示词字段）的显式迁移；
+ * 已提供 1→2（模型预设新增思考强度字段）、2→3（会话新增用户称呼字段）、
+ * 3→4（会话新增后置提示词字段）与 4→5（会话新增状态栏优化字段）的显式迁移；
  * 其余版本变化仍采用重建表策略（[RoomDatabase.Builder.fallbackToDestructiveMigration]）。
  */
 @Database(
@@ -30,7 +30,7 @@ import com.myagent.app.data.db.entity.WorldBookEntryEntity
         MessageEntity::class,
         WorldBookEntryEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -68,6 +68,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** 4 → 5：会话新增状态栏优化相关字段。 */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE conversation ADD COLUMN status_bar_optimization INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE conversation ADD COLUMN status_body_instruction TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE conversation ADD COLUMN status_bar_instruction TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE conversation ADD COLUMN status_force_no_thinking INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         /** 使用 Application Context 创建（或复用）数据库单例。 */
         fun init(context: Context) {
             synchronized(this) {
@@ -77,7 +87,7 @@ abstract class AppDatabase : RoomDatabase() {
                         AppDatabase::class.java,
                         "myagent.db",
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                         .fallbackToDestructiveMigration(dropAllTables = true)
                         .build()
                 }

@@ -16,6 +16,12 @@ object Routes {
     /** 提示词编辑类型：会话后置提示词。 */
     const val PROMPT_KIND_POST_HISTORY = "postHistory"
 
+    /** 状态栏优化·正文请求附加指令。 */
+    const val PROMPT_KIND_STATUS_BODY = "statusBody"
+
+    /** 状态栏优化·状态栏请求附加指令。 */
+    const val PROMPT_KIND_STATUS_BAR = "statusBar"
+
     /** 会话列表页。 */
     const val CONVERSATION_LIST = "conversationList"
 

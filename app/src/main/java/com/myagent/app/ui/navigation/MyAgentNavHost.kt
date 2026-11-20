@@ -90,6 +90,12 @@ fun MyAgentNavHost() {
                     navController.navigate(Routes.promptEdit(conversationId, Routes.PROMPT_KIND_POST_HISTORY))
                 },
                 onOpenWorldbook = { navController.navigate(Routes.worldbook(id)) },
+                onOpenStatusBodyInstruction = { conversationId ->
+                    navController.navigate(Routes.promptEdit(conversationId, Routes.PROMPT_KIND_STATUS_BODY))
+                },
+                onOpenStatusBarInstruction = { conversationId ->
+                    navController.navigate(Routes.promptEdit(conversationId, Routes.PROMPT_KIND_STATUS_BAR))
+                },
             )
         }
 

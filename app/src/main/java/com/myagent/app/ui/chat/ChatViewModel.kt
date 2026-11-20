@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.myagent.app.data.db.entity.ConversationEntity
 import com.myagent.app.data.db.entity.MessageEntity
 import com.myagent.app.data.repository.ChatRepository
+import com.myagent.app.data.repository.ChatStreamEvent
 import com.myagent.app.data.repository.ConversationRepository
 import com.myagent.app.data.repository.MessageRepository
 import com.myagent.app.network.ApiException
@@ -26,6 +27,10 @@ import kotlinx.coroutines.launch
  *
  * 会话 id 从导航参数 [Routes.ARG_CONVERSATION_ID] 中读取；消息与会话信息直接观察仓库
  * 的 Flow，发送、重新生成、停止等操作委托给 [ChatRepository]。
+ *
+ * 开启「状态栏优化」的会话在两阶段流式期间共享同一个 [streaming] 状态（期间输入区
+ * 显示"停止"、不可发送）：正文增量写入 [streamingText]，状态栏增量写入 [statusStreamText]，
+ * 由界面按渐进规则渲染状态栏面板。
  *
  * @param savedStateHandle 导航传入的状态句柄，必须包含会话 id。
  * @param chatRepository 聊天编排仓库。
@@ -56,11 +61,14 @@ class ChatViewModel(
     /** 输入框内容。 */
     val inputText = MutableStateFlow("")
 
-    /** 是否正在流式接收 AI 回复。 */
+    /** 是否正在流式接收 AI 回复（正文或状态栏阶段均为 true）。 */
     val streaming = MutableStateFlow(false)
 
-    /** 本轮流式输出已接收的增量文本。 */
+    /** 本轮流式正文已接收的增量文本（状态栏优化会话中已剔除状态栏标记）。 */
     val streamingText = MutableStateFlow("")
+
+    /** 本轮流式状态栏已接收的原始增量文本（可能尚未闭合）。 */
+    val statusStreamText = MutableStateFlow("")
 
     /** 待展示的错误提示；界面展示后调用 [clearError] 清除。 */
     val error = MutableStateFlow<String?>(null)
@@ -86,7 +94,7 @@ class ChatViewModel(
     /** 重试：重新生成即重试（失败时最后一条是用户消息，重新生成会再次请求）。 */
     fun retry() = regenerate()
 
-    /** 停止当前生成；已生成的部分内容由聊天仓库负责落库。 */
+    /** 停止当前生成；已生成的部分内容由聊天仓库负责落库（含部分状态栏）。 */
     fun stop() {
         streamJob?.cancel()
         streamJob = null
@@ -105,21 +113,41 @@ class ChatViewModel(
     }
 
     /**
-     * 启动一次流式请求：把增量文本累加到 [streamingText]，失败时写入 [error]。
+     * 启动一次流式请求：消费仓库的流式事件，正文增量写入 [streamingText]、
+     * 状态栏增量写入 [statusStreamText]；失败提示写入 [error]。
      *
      * 请求取消（用户点击「停止」）会被重新抛出，以便协程正常结束；其余异常统一转成中文提示。
      *
-     * @param block 返回增量文本 Flow 的挂起函数。
+     * @param block 返回流式事件的挂起函数。
      */
-    private fun launchRequest(block: suspend () -> Flow<String>) {
+    private fun launchRequest(block: suspend () -> Flow<ChatStreamEvent>) {
         streamJob?.cancel()
         streamJob = viewModelScope.launch {
             streaming.value = true
             streamingText.value = ""
+            statusStreamText.value = ""
             error.value = null
             try {
-                block().collect { delta ->
-                    streamingText.update { it + delta }
+                block().collect { event ->
+                    when (event) {
+                        is ChatStreamEvent.BodyDelta -> {
+                            streamingText.update { it + event.text }
+                        }
+
+                        ChatStreamEvent.StatusStarted -> {
+                            statusStreamText.value = ""
+                        }
+
+                        is ChatStreamEvent.StatusDelta -> {
+                            statusStreamText.update { it + event.text }
+                        }
+
+                        is ChatStreamEvent.StatusFailed -> {
+                            error.value = event.userMessage
+                        }
+
+                        ChatStreamEvent.Completed -> Unit
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -128,6 +156,7 @@ class ChatViewModel(
             } finally {
                 streaming.value = false
                 streamingText.value = ""
+                statusStreamText.value = ""
             }
         }
     }

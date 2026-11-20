@@ -28,6 +28,18 @@ data class ConversationEntity(
     /** 发送消息时替换 `{{user}}` 宏所用的用户称呼。 */
     @ColumnInfo(name = "user_name")
     val userName: String = "用户",
+    /** 是否开启「状态栏优化」：正文与状态栏分两次请求分别流式生成。 */
+    @ColumnInfo(name = "status_bar_optimization")
+    val statusBarOptimization: Boolean = false,
+    /** 状态栏优化·正文请求的附加指令；空串表示使用内置默认指令。 */
+    @ColumnInfo(name = "status_body_instruction")
+    val statusBodyInstruction: String = "",
+    /** 状态栏优化·状态栏请求的附加指令；空串表示使用内置默认指令。 */
+    @ColumnInfo(name = "status_bar_instruction")
+    val statusBarInstruction: String = "",
+    /** 状态栏优化·是否强制状态栏请求关闭思考模式（默认关闭，沿用预设）。 */
+    @ColumnInfo(name = "status_force_no_thinking")
+    val statusForceNoThinking: Boolean = false,
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
     @ColumnInfo(name = "updated_at")

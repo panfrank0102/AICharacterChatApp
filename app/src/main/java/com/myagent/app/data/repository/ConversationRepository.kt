@@ -25,6 +25,10 @@ class ConversationRepository(private val dao: ConversationDao) {
      *
      * @param postHistoryPrompt 后置提示词，每轮请求中插在对话历史之后（最后一条 system）。
      * @param userName 发送消息时替换 `{{user}}` 宏所用的用户称呼。
+     * @param statusBarOptimization 是否开启状态栏优化（正文与状态栏分两次请求）。
+     * @param statusBodyInstruction 状态栏优化·正文请求的附加指令；空串表示使用内置默认指令。
+     * @param statusBarInstruction 状态栏优化·状态栏请求的附加指令；空串表示使用内置默认指令。
+     * @param statusForceNoThinking 状态栏优化·是否强制状态栏请求关闭思考模式。
      * @return 新会话 id。
      */
     suspend fun create(
@@ -35,6 +39,10 @@ class ConversationRepository(private val dao: ConversationDao) {
         scanCount: Int = 20,
         recursionDepth: Int = 2,
         userName: String = "用户",
+        statusBarOptimization: Boolean = false,
+        statusBodyInstruction: String = "",
+        statusBarInstruction: String = "",
+        statusForceNoThinking: Boolean = false,
     ): Long {
         val now = System.currentTimeMillis()
         return dao.insert(
@@ -46,6 +54,10 @@ class ConversationRepository(private val dao: ConversationDao) {
                 scanCount = scanCount,
                 recursionDepth = recursionDepth,
                 userName = userName,
+                statusBarOptimization = statusBarOptimization,
+                statusBodyInstruction = statusBodyInstruction,
+                statusBarInstruction = statusBarInstruction,
+                statusForceNoThinking = statusForceNoThinking,
                 createdAt = now,
                 updatedAt = now,
             ),
@@ -58,7 +70,7 @@ class ConversationRepository(private val dao: ConversationDao) {
         dao.update(existing.copy(title = title))
     }
 
-    /** 更新会话级设置（预设、前置提示词、后置提示词、扫描条数、递归深度、用户称呼）。 */
+    /** 更新会话级设置（预设、提示词、扫描条数、递归深度、用户称呼、状态栏优化）。 */
     suspend fun updateSettings(
         id: Long,
         presetId: Long?,
@@ -67,6 +79,10 @@ class ConversationRepository(private val dao: ConversationDao) {
         scanCount: Int,
         recursionDepth: Int,
         userName: String,
+        statusBarOptimization: Boolean,
+        statusBodyInstruction: String,
+        statusBarInstruction: String,
+        statusForceNoThinking: Boolean,
     ) {
         val existing = dao.getById(id) ?: return
         dao.update(
@@ -77,6 +93,10 @@ class ConversationRepository(private val dao: ConversationDao) {
                 scanCount = scanCount,
                 recursionDepth = recursionDepth,
                 userName = userName,
+                statusBarOptimization = statusBarOptimization,
+                statusBodyInstruction = statusBodyInstruction,
+                statusBarInstruction = statusBarInstruction,
+                statusForceNoThinking = statusForceNoThinking,
             ),
         )
     }
