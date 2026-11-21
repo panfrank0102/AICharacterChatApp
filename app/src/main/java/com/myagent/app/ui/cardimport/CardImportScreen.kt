@@ -100,7 +100,7 @@ fun CardImportScreen(onBack: () -> Unit, onImported: (Long) -> Unit) {
                 card = currentCard,
                 promptPreview = vm.promptPreview,
                 totalWorldbookCount = vm.totalWorldbookCount,
-                skippedWorldbookCount = vm.skippedWorldbookCount,
+                keywordlessWorldbookCount = vm.keywordlessWorldbookCount,
                 importing = importing,
                 modifier = Modifier
                     .fillMaxSize()
@@ -123,7 +123,7 @@ fun CardImportScreen(onBack: () -> Unit, onImported: (Long) -> Unit) {
  * @param card 待导入的角色卡
  * @param promptPreview 导入后将写入会话的系统提示词
  * @param totalWorldbookCount 世界书条目总数
- * @param skippedWorldbookCount 因没有关键词会被跳过的条目数
+ * @param keywordlessWorldbookCount 没有关键词的条目数（会导入但需补充关键词才会触发）
  * @param importing 是否正在导入
  * @param modifier 外部修饰符
  * @param onImport 点击"导入"按钮的回调，参数为选中的开场白下标与自定义开场内容
@@ -133,7 +133,7 @@ private fun CardImportContent(
     card: CharacterCard,
     promptPreview: String,
     totalWorldbookCount: Int,
-    skippedWorldbookCount: Int,
+    keywordlessWorldbookCount: Int,
     importing: Boolean,
     modifier: Modifier = Modifier,
     onImport: (Set<Int>, String) -> Unit,
@@ -166,11 +166,12 @@ private fun CardImportContent(
             style = MaterialTheme.typography.bodyMedium,
         )
 
-        // 2) 世界书统计与跳过提示。
+        // 2) 世界书统计与无关键词提示。
         Text(text = "世界书：共 $totalWorldbookCount 条", style = MaterialTheme.typography.bodyMedium)
-        if (skippedWorldbookCount > 0) {
+        if (keywordlessWorldbookCount > 0) {
             Text(
-                text = "注意：有 $skippedWorldbookCount 条没有关键词，导入后不会生效，将被跳过",
+                text = "注意：有 $keywordlessWorldbookCount 条没有关键词，导入后将暂时不会触发，" +
+                    "可在导入后的世界书中补充关键词",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )

@@ -35,7 +35,7 @@ class CharacterCardImporterTest {
     )
 
     @Test
-    fun import_withSyntheticCard_mapsFieldsAndSkipsKeywordlessEntries() = runBlocking {
+    fun import_withSyntheticCard_mapsFieldsAndImportsKeywordlessEntries() = runBlocking {
         val card = CharacterCard(
             name = "测试角色",
             description = "{{char}}是一名剑士",
@@ -82,13 +82,14 @@ class CharacterCardImporterTest {
         // 卡片 post_history_instructions → 会话后置提示词（{{char}} 已替换）
         assertEquals("后置要求：测试角色要冷静", conversation?.postHistoryPrompt)
 
-        // 世界书：1 条无关键词跳过，2 条导入，关键词按 | 拆分
-        assertEquals(1, result.skippedWorldbookCount)
-        assertEquals(2, result.importedWorldbookCount)
+        // 世界书：3 条全部导入；无关键词条目以空关键词导入，关键词按 | 拆分
+        assertEquals(3, result.importedWorldbookCount)
+        assertEquals(1, result.keywordlessWorldbookCount)
         val saved = worldBookDao.all(result.conversationId)
-        assertEquals(2, saved.size)
-        val weaponEntry = saved.first { it.title == "条目 1" }
-        assertEquals("武器条目", weaponEntry.content)
+        assertEquals(3, saved.size)
+        val keywordlessEntry = saved.first { it.content == "无关键词条目" }
+        assertEquals("", keywordlessEntry.keywords)
+        val weaponEntry = saved.first { it.content == "武器条目" }
         assertEquals(listOf("剑", "刀"), weaponEntry.keywords.split('\n'))
 
         // 消息：勾选的第二条开场白（AI）+ 自定义开场（user）
@@ -115,11 +116,14 @@ class CharacterCardImporterTest {
         val result = importer.import(CharacterCardImporter.Options(card = card))
 
         assertEquals("艾诺迪亚大陆", conversationDao.find(result.conversationId)?.title)
-        assertEquals(9, result.importedWorldbookCount)
-        assertEquals(7, result.skippedWorldbookCount)
-        assertEquals(9, worldBookDao.all(result.conversationId).size)
+        // 16 条全部导入，其中 7 条无关键词
+        assertEquals(16, result.importedWorldbookCount)
+        assertEquals(7, result.keywordlessWorldbookCount)
+        val savedEntries = worldBookDao.all(result.conversationId)
+        assertEquals(16, savedEntries.size)
+        assertEquals(7, savedEntries.count { it.keywords.isBlank() })
         // 帝国条目：keys "布里塔尼亚帝国|布里塔尼亚" 拆为两个关键词
-        val empireEntry = worldBookDao.all(result.conversationId).first {
+        val empireEntry = savedEntries.first {
             it.keywords.split('\n').contains("布里塔尼亚帝国")
         }
         assertEquals(listOf("布里塔尼亚帝国", "布里塔尼亚"), empireEntry.keywords.split('\n'))

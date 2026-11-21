@@ -7,7 +7,8 @@ import com.myagent.app.domain.import.CharacterCard
  *
  * 导入过程按固定顺序执行：
  * 1. 新建会话，标题取角色名，会话提示词由卡片的文字设定拼接而成；
- * 2. 把卡片附带世界书的条目逐条写入新会话的世界书，没有关键词的条目跳过；
+ * 2. 把卡片附带世界书的条目逐条写入新会话的世界书：没有关键词的条目也会导入
+ *    （关键词留空，用户可后续在世界书中自行补充；未补充前不会触发）；
  * 3. 按用户勾选插入备用开场白（AI 首条消息），最后按需插入自定义开场（用户消息）。
  *
  * 会话的扫描条数与递归深度继承角色书声明，未声明时使用需求文档中的默认值。
@@ -39,20 +40,20 @@ class CharacterCardImporter(
      * 导入结果。
      *
      * @property conversationId 新建的会话 id
-     * @property importedWorldbookCount 成功写入的世界书条目数
-     * @property skippedWorldbookCount 因为没有关键词而跳过的世界书条目数
+     * @property importedWorldbookCount 写入的世界书条目数（含无关键词条目）
+     * @property keywordlessWorldbookCount 其中没有关键词的条目数（导入后需补充关键词才会触发）
      */
     data class Result(
         val conversationId: Long,
         val importedWorldbookCount: Int,
-        val skippedWorldbookCount: Int,
+        val keywordlessWorldbookCount: Int,
     )
 
     /**
      * 执行导入。
      *
      * @param options 导入选项
-     * @return 导入结果，含新会话 id 与世界书条目的导入/跳过数量
+     * @return 导入结果，含新会话 id 与世界书条目的导入数量、无关键词条目数量
      */
     suspend fun import(options: Options): Result {
         val card = options.card
@@ -75,13 +76,12 @@ class CharacterCardImporter(
         )
 
         var importedCount = 0
-        var skippedCount = 0
+        var keywordlessCount = 0
         book?.entries?.forEach { entry ->
             val keywords = splitKeywords(entry.keys, entry.secondaryKeys)
             if (keywords.isEmpty()) {
-                // 没有关键词的条目永远不会被命中，直接跳过。
-                skippedCount++
-                return@forEach
+                // 没有关键词的条目也导入：关键词留空，由用户之后自行补充。
+                keywordlessCount++
             }
             worldbookRepository.save(
                 conversationId = conversationId,
@@ -108,7 +108,7 @@ class CharacterCardImporter(
         return Result(
             conversationId = conversationId,
             importedWorldbookCount = importedCount,
-            skippedWorldbookCount = skippedCount,
+            keywordlessWorldbookCount = keywordlessCount,
         )
     }
 

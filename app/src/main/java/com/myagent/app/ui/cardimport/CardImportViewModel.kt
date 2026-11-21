@@ -28,8 +28,8 @@ class CardImportViewModel(
     val promptPreview: String
         get() = card.value?.let { currentCard -> CharacterCardImporter.buildSystemPrompt(currentCard) }.orEmpty()
 
-    /** 世界书中因没有关键词而会被跳过的条目数。 */
-    val skippedWorldbookCount: Int
+    /** 世界书中没有关键词的条目数（这些条目也会导入，补充关键词后才会触发）。 */
+    val keywordlessWorldbookCount: Int
         get() = card.value?.worldBook?.entries?.count { entry ->
             CharacterCardImporter.splitKeywords(entry.keys, entry.secondaryKeys).isEmpty()
         } ?: 0
