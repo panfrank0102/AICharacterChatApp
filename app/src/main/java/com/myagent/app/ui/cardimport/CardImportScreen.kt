@@ -105,10 +105,11 @@ fun CardImportScreen(onBack: () -> Unit, onImported: (Long) -> Unit) {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                onImport = { selectedIndexes, customOpening ->
+                onImport = { selectedIndexes, customOpening, storyEnhancement ->
                     vm.import(
                         selectedGreetingIndexes = selectedIndexes,
                         customOpening = customOpening,
+                        storyEnhancement = storyEnhancement,
                         onDone = onImported,
                     )
                 },
@@ -126,7 +127,7 @@ fun CardImportScreen(onBack: () -> Unit, onImported: (Long) -> Unit) {
  * @param keywordlessWorldbookCount 没有关键词的条目数（会导入但需补充关键词才会触发）
  * @param importing 是否正在导入
  * @param modifier 外部修饰符
- * @param onImport 点击"导入"按钮的回调，参数为选中的开场白下标与自定义开场内容
+ * @param onImport 点击"导入"按钮的回调，参数为选中的开场白下标、自定义开场内容与剧情增强开关
  */
 @Composable
 private fun CardImportContent(
@@ -136,7 +137,7 @@ private fun CardImportContent(
     keywordlessWorldbookCount: Int,
     importing: Boolean,
     modifier: Modifier = Modifier,
-    onImport: (Set<Int>, String) -> Unit,
+    onImport: (Set<Int>, String, Boolean) -> Unit,
 ) {
     var selectedGreetings by remember { mutableStateOf(emptySet<Int>()) }
     var customOpeningChecked by remember { mutableStateOf(false) }
@@ -253,19 +254,43 @@ private fun CardImportContent(
             )
         }
 
-        // 6) 宏替换说明。
+        // 6) 剧情增强勾选（创建后不可更改）。
+        var storyEnhancement by remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = storyEnhancement,
+                onCheckedChange = { checked -> storyEnhancement = checked },
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "剧情增强",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = "开启后不可更改；每轮回复生成剧情总结以节省 Token 与上下文",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        // 7) 宏替换说明。
         Text(
             text = "{{user}} 会在发送时替换为会话设置中的用户称呼（默认\"用户\"）；{{char}} 已替换为卡名。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        // 7) 确认导入。
+        // 8) 确认导入。
         Button(
             onClick = {
                 onImport(
                     selectedGreetings,
                     if (customOpeningChecked) customOpeningText else "",
+                    storyEnhancement,
                 )
             },
             enabled = !importing,

@@ -40,6 +40,15 @@ data class ConversationEntity(
     /** 状态栏优化·是否强制状态栏请求关闭思考模式（默认关闭，沿用预设）。 */
     @ColumnInfo(name = "status_force_no_thinking")
     val statusForceNoThinking: Boolean = false,
+    /** 剧情增强：创建会话/导入角色卡时决定，创建后不可更改。 */
+    @ColumnInfo(name = "story_enhancement")
+    val storyEnhancement: Boolean = false,
+    /** 剧情增强·剧情分支选择：总结请求同时返回四个备选选项（可随时修改）。 */
+    @ColumnInfo(name = "story_branches")
+    val storyBranches: Boolean = false,
+    /** 剧情增强·每次请求发送的最近对话轮次（1~10，默认 2；可随时修改）。 */
+    @ColumnInfo(name = "story_rounds")
+    val storyRounds: Int = 2,
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
     @ColumnInfo(name = "updated_at")

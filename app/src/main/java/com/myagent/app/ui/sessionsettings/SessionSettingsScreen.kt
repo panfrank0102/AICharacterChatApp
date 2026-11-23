@@ -57,6 +57,9 @@ private const val DEFAULT_SCAN_COUNT = 20
 /** 递归深度未加载时的兜底值，与需求文档的默认值一致。 */
 private const val DEFAULT_RECURSION_DEPTH = 2
 
+/** 剧情增强发送轮次未加载时的兜底值，与需求文档的默认值一致。 */
+private const val DEFAULT_STORY_ROUNDS = 2
+
 /** 扫描条数输入框最多允许输入的字符数（200 为三位数）。 */
 private const val SCAN_COUNT_MAX_LENGTH = 3
 
@@ -118,6 +121,18 @@ fun SessionSettingsScreen(
     }
     val commitUserName: () -> Unit = {
         vm.setUserName(userNameText)
+    }
+
+    var storyRoundsText by rememberSaveable { mutableStateOf(DEFAULT_STORY_ROUNDS.toString()) }
+    var storyRoundsFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(conversation?.storyRounds) {
+        conversation?.storyRounds?.let { rounds -> storyRoundsText = rounds.toString() }
+    }
+    val commitStoryRounds: () -> Unit = {
+        val parsed = storyRoundsText.trim().toIntOrNull() ?: DEFAULT_STORY_ROUNDS
+        val clamped = parsed.coerceIn(1, 10)
+        storyRoundsText = clamped.toString()
+        vm.setStoryRounds(clamped)
     }
 
     Scaffold(
@@ -257,6 +272,58 @@ fun SessionSettingsScreen(
                 HorizontalDivider()
             }
             Spacer(Modifier.height(12.dp))
+
+            // 剧情增强（仅开启剧情增强的会话显示；开关本身创建后不可更改）。
+            if (conversation?.storyEnhancement == true) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("剧情分支选择", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = "开启后每轮剧情总结附带四个备选剧情选项",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = conversation?.storyBranches == true,
+                        onCheckedChange = { vm.setStoryBranches(it) },
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("发送对话轮次", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "每轮请求发送最近 N 轮原话（N 条 AI 回复与夹在其中的用户输入），" +
+                        "更早的历史仅发送剧情总结",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = storyRoundsText,
+                        onValueChange = { input ->
+                            storyRoundsText = input.filter { char -> char.isDigit() }.take(2)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .onFocusChanged { focusState ->
+                                if (storyRoundsFocused && !focusState.isFocused) {
+                                    commitStoryRounds()
+                                }
+                                storyRoundsFocused = focusState.isFocused
+                            },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        label = { Text("1 ~ 10") },
+                    )
+                    TextButton(onClick = commitStoryRounds) {
+                        Text("保存")
+                    }
+                }
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+            }
 
             Text("用户称呼（{{user}}）", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))

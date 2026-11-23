@@ -21,6 +21,9 @@ sealed interface ChatStreamEvent {
     /** 状态栏生成失败：正文已保存，界面可提示用户。 */
     data class StatusFailed(val userMessage: String) : ChatStreamEvent
 
+    /** 剧情总结生成失败：AI 回复已保存（不含总结），界面可轻提示用户。 */
+    data class SummaryFailed(val userMessage: String) : ChatStreamEvent
+
     /** 本轮 AI 消息已全部落库。 */
     data object Completed : ChatStreamEvent
 }

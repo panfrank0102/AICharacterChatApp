@@ -52,11 +52,13 @@ class CardImportViewModel(
      *
      * @param selectedGreetingIndexes 选中的备用开场白下标
      * @param customOpening 自定义开场白内容，空白表示不插入
+     * @param storyEnhancement 是否为新会话开启剧情增强（创建后不可更改）
      * @param onDone 导入成功的回调，参数为新建会话 id
      */
     fun import(
         selectedGreetingIndexes: Set<Int>,
         customOpening: String,
+        storyEnhancement: Boolean,
         onDone: (Long) -> Unit,
     ) {
         viewModelScope.launch {
@@ -69,6 +71,7 @@ class CardImportViewModel(
                         card = currentCard,
                         selectedGreetingIndexes = selectedGreetingIndexes,
                         customOpening = customOpening,
+                        storyEnhancement = storyEnhancement,
                     ),
                 )
                 ImportState.pendingCard = null

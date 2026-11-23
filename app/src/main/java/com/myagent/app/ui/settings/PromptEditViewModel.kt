@@ -120,6 +120,8 @@ class PromptEditViewModel(
                         else -> conversation.statusBarInstruction
                     },
                     statusForceNoThinking = conversation.statusForceNoThinking,
+                    storyBranches = conversation.storyBranches,
+                    storyRounds = conversation.storyRounds,
                 )
             }
             onSaved()

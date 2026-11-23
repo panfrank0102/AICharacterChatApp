@@ -4,11 +4,17 @@ import com.myagent.app.data.db.dao.ConversationDao
 import com.myagent.app.data.db.dao.MessageDao
 import com.myagent.app.data.db.dao.PresetDao
 import com.myagent.app.data.db.dao.WorldBookDao
+import com.myagent.app.data.db.entity.ConversationEntity
 import com.myagent.app.data.db.entity.MessageEntity
+import com.myagent.app.data.db.entity.ModelPresetEntity
 import com.myagent.app.domain.PromptAssembler
 import com.myagent.app.domain.StatusBarInstructions
 import com.myagent.app.domain.WorldbookMatcher
 import com.myagent.app.domain.statusbar.StatusBlockParser
+import com.myagent.app.domain.story.StoryMessage
+import com.myagent.app.domain.story.StoryRecapBuilder
+import com.myagent.app.domain.story.StorySummaryInstructions
+import com.myagent.app.domain.story.StorySummaryParser
 import com.myagent.app.network.ApiException
 import com.myagent.app.network.ChatApi
 import com.myagent.app.network.dto.ChatMessage
@@ -94,7 +100,6 @@ class ChatRepository(
 
         // 世界书扫描窗口使用「本轮输入 + 最近 scanCount 条历史正文」，因此需在插入用户消息前取历史。
         val historyBefore = messageDao.getByConversation(conversationId)
-        val scanHistory = historyBefore.takeLast(conversation.scanCount).map { it.content }
 
         var insertedMessageId: Long? = null
         if (persistUserMessage) {
@@ -122,6 +127,31 @@ class ChatRepository(
         val apiKey = keyDecryptor(preset.apiKeyEncrypted)
             ?: throw IllegalStateException("API Key 解密失败，请重新保存预设")
 
+        // 历史消息排除刚插入的用户消息（本轮输入会作为最后一条 user 追加）；
+        // 重新生成（persistUserMessage=false）时，最后一条消息就是本轮输入对应的用户消息，
+        // 同样排除，避免请求中出现两条相同的用户消息。
+        val excludedId = insertedMessageId
+        val historyForPrompt = if (excludedId == null) {
+            historyBefore.dropLast(1)
+        } else {
+            historyBefore.filter { it.id != excludedId }
+        }
+
+        // 剧情增强：按发送轮次切分窗口，超窗部分用剧情总结拼成前情提要。
+        val storyContext = StoryRecapBuilder.build(
+            messages = historyForPrompt.map { StoryMessage(it.role, it.content, it.summary) },
+            rounds = conversation.storyRounds.coerceIn(1, 10),
+            enhancementEnabled = conversation.storyEnhancement,
+        )
+
+        // 世界书扫描文本：剧情增强时 = 前情提要 + 窗口原话；否则 = 最近 scanCount 条原文。
+        val scanTexts = if (conversation.storyEnhancement) {
+            listOfNotNull(storyContext.recap.takeIf { it.isNotBlank() }) +
+                storyContext.window.map { it.content }
+        } else {
+            historyBefore.takeLast(conversation.scanCount).map { it.content }
+        }
+
         // 世界书匹配：启用条目 → 领域匹配（含递归与优先级排序）。
         val entries = worldBookDao.getEnabledByConversation(conversationId).map { entry ->
             WorldbookMatcher.Entry(
@@ -133,27 +163,19 @@ class ChatRepository(
         }
         val matched = WorldbookMatcher.match(
             userText,
-            scanHistory,
+            scanTexts,
             entries,
             conversation.scanCount,
             conversation.recursionDepth,
         )
 
-        // 历史消息排除刚插入的用户消息（本轮输入会作为最后一条 user 追加）；
-        // 重新生成（persistUserMessage=false）时，最后一条消息就是本轮输入对应的用户消息，
-        // 同样排除，避免请求中出现两条相同的用户消息。
-        val excludedId = insertedMessageId
-        val historyForPrompt = if (excludedId == null) {
-            historyBefore.dropLast(1)
-        } else {
-            historyBefore.filter { it.id != excludedId }
-        }
         val assembled = PromptAssembler.assemble(
             globalPrompt = snapshot.globalPrompt,
             sessionPrompt = conversation.systemPrompt,
             postHistoryPrompt = conversation.postHistoryPrompt,
+            storyRecap = storyContext.recap,
             worldbookEntries = matched,
-            history = historyForPrompt.map { ChatMessage(it.role, it.content) },
+            history = storyContext.window.map { ChatMessage(it.role, it.content) },
             userInput = userText,
             contextLimitChars = snapshot.contextLimitChars,
         )
@@ -188,7 +210,9 @@ class ChatRepository(
                 persistPartial(conversationId, full.toString())
                 throw e
             }
-            saveAssistant(conversationId, full.toString())
+            val messageId = saveAssistant(conversationId, full.toString())
+            generateStorySummary(conversationId, messageId, full.toString(), conversation, preset, apiKey, temperature)
+                ?.let { emit(ChatStreamEvent.SummaryFailed(it)) }
             emit(ChatStreamEvent.Completed)
             return@flow
         }
@@ -246,6 +270,7 @@ class ChatRepository(
 
         val rawStatus = StringBuilder()
         var statusFailure: String? = null
+        var savedContent = visibleBody
         try {
             api.chatStream(
                 preset.baseUrl,
@@ -261,9 +286,8 @@ class ChatRepository(
             val block = StatusBlockParser.extractStatusBlock(rawStatus.toString())
             if (block == null) {
                 statusFailure = "状态栏更新失败：未能识别状态栏内容"
-                saveAssistant(conversationId, visibleBody)
             } else {
-                saveAssistant(conversationId, visibleBody + "\n\n" + block)
+                savedContent = visibleBody + "\n\n" + block
             }
         } catch (e: CancellationException) {
             // 停止生成：保留已收到的部分状态栏（自动补齐闭合标签）与正文。
@@ -277,11 +301,13 @@ class ChatRepository(
             throw e
         } catch (e: Exception) {
             // 状态栏请求失败：只保留正文，丢弃已收到的部分状态栏。
-            saveAssistant(conversationId, visibleBody)
             statusFailure = toUserMessage(e)
         }
 
+        val messageId = saveAssistant(conversationId, savedContent)
         statusFailure?.let { emit(ChatStreamEvent.StatusFailed(it)) }
+        generateStorySummary(conversationId, messageId, savedContent, conversation, preset, apiKey, temperature)
+            ?.let { emit(ChatStreamEvent.SummaryFailed(it)) }
         emit(ChatStreamEvent.Completed)
     }
 
@@ -293,10 +319,10 @@ class ChatRepository(
         }
     }
 
-    /** 保存一条 AI 回复并刷新会话更新时间。 */
-    private suspend fun saveAssistant(conversationId: Long, content: String) {
-        if (content.isBlank()) return
-        messageDao.insert(
+    /** 保存一条 AI 回复并刷新会话更新时间；返回新消息 id（内容空白时返回 0）。 */
+    private suspend fun saveAssistant(conversationId: Long, content: String): Long {
+        if (content.isBlank()) return 0L
+        val id = messageDao.insert(
             MessageEntity(
                 conversationId = conversationId,
                 role = ROLE_ASSISTANT,
@@ -304,8 +330,54 @@ class ChatRepository(
                 createdAt = now(),
             ),
         )
-        val latest = conversationDao.getById(conversationId) ?: return
+        val latest = conversationDao.getById(conversationId) ?: return id
         conversationDao.update(latest.copy(updatedAt = now()))
+        return id
+    }
+
+    /**
+     * 剧情增强：为刚保存的 AI 回复生成剧情总结（非流式）。
+     *
+     * 总结对象为回复正文（剔除状态栏标记）；分支选择开启时同时解析四个备选选项并落库。
+     * 思考强度规则：预设未设置思考强度 → 总结请求也不设置；预设已设置 → 强制"不思考"（更快更省 Token）。
+     * 失败时返回提示文案（界面轻提示），消息保持无总结状态。
+     */
+    private suspend fun generateStorySummary(
+        conversationId: Long,
+        messageId: Long,
+        content: String,
+        conversation: ConversationEntity,
+        preset: ModelPresetEntity,
+        apiKey: String,
+        temperature: Double,
+    ): String? {
+        if (messageId == 0L || !conversation.storyEnhancement) return null
+        val bodyOnly = StatusBlockParser.stripStatusBlocks(content)
+        if (bodyOnly.isBlank()) return null
+        val instruction = StorySummaryInstructions.summaryInstruction(conversation.storyBranches)
+        val summaryMessages = listOf(
+            ChatMessage(role = ROLE_SYSTEM, content = instruction),
+            ChatMessage(role = ROLE_USER, content = bodyOnly),
+        )
+        val effort = if (preset.reasoningEffort == null) {
+            null
+        } else {
+            StatusBarInstructions.REASONING_EFFORT_NONE
+        }
+        return try {
+            val reply = api.complete(preset.baseUrl, apiKey, preset.model, summaryMessages, temperature, effort)
+            val result = StorySummaryParser.parse(reply, conversation.storyBranches)
+            if (result == null) {
+                "剧情总结生成失败"
+            } else {
+                messageDao.updateSummary(messageId, result.summary, result.branches.joinToString("\n"))
+                null
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            "剧情总结生成失败"
+        }
     }
 
     /** 把落库的关键词串按换行/逗号拆分为非空关键词列表。 */

@@ -50,6 +50,11 @@ class MessageRepository(private val dao: MessageDao) {
         dao.deleteLastAssistant(conversationId)
     }
 
+    /** 更新一条消息的剧情总结与分支选项（剧情增强功能）。 */
+    suspend fun updateSummary(messageId: Long, summary: String, branches: List<String>) {
+        dao.updateSummary(messageId, summary, branches.joinToString("\n"))
+    }
+
     private companion object {
         /** 用户消息的 role 取值。 */
         const val ROLE_USER = "user"

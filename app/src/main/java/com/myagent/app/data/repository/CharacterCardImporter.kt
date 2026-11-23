@@ -29,11 +29,13 @@ class CharacterCardImporter(
      * @property card 待导入的角色卡
      * @property selectedGreetingIndexes 选中的备用开场白下标（从 0 开始）
      * @property customOpening 自定义开场白，将作为第一条用户消息插入
+     * @property storyEnhancement 是否为新会话开启剧情增强（创建后不可更改）
      */
     data class Options(
         val card: CharacterCard,
         val selectedGreetingIndexes: Set<Int> = emptySet(),
         val customOpening: String = "",
+        val storyEnhancement: Boolean = false,
     )
 
     /**
@@ -73,6 +75,7 @@ class CharacterCardImporter(
             scanCount = scanCount,
             recursionDepth = recursionDepth,
             userName = DEFAULT_USER_NAME,
+            storyEnhancement = options.storyEnhancement,
         )
 
         var importedCount = 0

@@ -30,4 +30,8 @@ interface MessageDao {
 
     @Query("SELECT * FROM message WHERE conversation_id = :conversationId ORDER BY id DESC LIMIT 1")
     suspend fun getLastMessage(conversationId: Long): MessageEntity?
+
+    /** 更新一条消息的剧情总结与分支选项（剧情增强功能）。 */
+    @Query("UPDATE message SET summary = :summary, branches = :branches WHERE id = :id")
+    suspend fun updateSummary(id: Long, summary: String, branches: String)
 }

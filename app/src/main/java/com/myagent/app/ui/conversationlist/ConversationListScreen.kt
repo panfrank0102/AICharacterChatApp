@@ -3,23 +3,30 @@ package com.myagent.app.ui.conversationlist
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -98,6 +105,11 @@ fun ConversationListScreen(
     var deleteConversation by remember { mutableStateOf<ConversationEntity?>(null) }
     var renameText by remember { mutableStateOf("") }
 
+    // 新建会话对话框状态（标题可留空；剧情增强创建后不可更改）。
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var createTitle by remember { mutableStateOf("") }
+    var createStoryEnhancement by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -117,12 +129,7 @@ fun ConversationListScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = {
-                    scope.launch {
-                        val id = vm.createConversation()
-                        onOpenChat(id)
-                    }
-                },
+                onClick = { showCreateDialog = true },
             ) {
                 Icon(Icons.Default.Add, contentDescription = "新建会话")
             }
@@ -155,6 +162,59 @@ fun ConversationListScreen(
                 }
             }
         }
+    }
+
+    if (showCreateDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text("新建会话") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = createTitle,
+                        onValueChange = { createTitle = it },
+                        label = { Text("会话标题（可留空）") },
+                        singleLine = true,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = createStoryEnhancement,
+                            onCheckedChange = { createStoryEnhancement = it },
+                        )
+                        Column {
+                            Text("剧情增强", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = "开启后不可更改；每轮回复生成剧情总结以节省 Token 与上下文",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCreateDialog = false
+                        val title = createTitle.trim()
+                        val enhancement = createStoryEnhancement
+                        createTitle = ""
+                        createStoryEnhancement = false
+                        scope.launch {
+                            val id = vm.createConversation(title, enhancement)
+                            onOpenChat(id)
+                        }
+                    },
+                ) {
+                    Text("创建")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) {
+                    Text("取消")
+                }
+            },
+        )
     }
 
     managedConversation?.let { conversation ->
@@ -255,7 +315,8 @@ fun ConversationListScreen(
 }
 
 /**
- * 单个会话卡片：上方为标题，下方为更新时间；单击进入会话，长按弹出管理对话框。
+ * 单个会话卡片：上方为标题（右上角带"剧情"徽章），下方为更新时间；
+ * 开启剧情增强的会话左侧有竖色条。单击进入会话，长按弹出管理对话框。
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -273,20 +334,50 @@ private fun ConversationListItem(
                 onLongClick = onLongClick,
             ),
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .height(IntrinsicSize.Min),
         ) {
-            Text(
-                text = conversation.title.ifBlank { "新会话" },
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = updatedAtText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (conversation.storyEnhancement) {
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .fillMaxHeight()
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(16.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = conversation.title.ifBlank { "新会话" },
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (conversation.storyEnhancement) {
+                        Text(
+                            text = "剧情",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier
+                                .background(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    shape = RoundedCornerShape(6.dp),
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+                Text(
+                    text = updatedAtText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

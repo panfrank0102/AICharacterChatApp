@@ -30,6 +30,12 @@ data class MessageEntity(
     val conversationId: Long,
     val role: String,
     val content: String,
+    /** 剧情总结（剧情增强功能，仅 AI 消息使用）；空串表示未生成。 */
+    @ColumnInfo(name = "summary")
+    val summary: String = "",
+    /** 剧情分支备选选项（剧情增强功能，仅 AI 消息使用）；多个选项按换行符分隔。 */
+    @ColumnInfo(name = "branches")
+    val branches: String = "",
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
 )

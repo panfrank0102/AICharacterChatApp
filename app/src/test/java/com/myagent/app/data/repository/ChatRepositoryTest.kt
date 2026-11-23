@@ -10,6 +10,7 @@ import com.myagent.app.data.db.entity.ModelPresetEntity
 import com.myagent.app.data.db.entity.WorldBookEntryEntity
 import com.myagent.app.data.prefs.SettingsDataStore
 import com.myagent.app.domain.StatusBarInstructions
+import com.myagent.app.domain.story.StorySummaryInstructions
 import com.myagent.app.network.ApiException
 import com.myagent.app.network.ChatApi
 import com.myagent.app.network.Kind
@@ -529,6 +530,164 @@ class ChatRepositoryTest {
     }
 
     // ---------------------------------------------------------------------
+    // 剧情增强
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun sendMessage_storyEnhancement_generatesSummaryAndUpdatesMessage() = runBlocking {
+        seedConversation(storyEnhancement = true)
+        seedPreset()
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文回复"))
+            enqueueComplete("主角抵达了城镇。")
+        }
+
+        val events = repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        assertEquals(ChatStreamEvent.Completed, events.last())
+        assertTrue(events.none { it is ChatStreamEvent.SummaryFailed })
+        val stored = messageDao.all(CONVERSATION_ID)
+        assertEquals(2, stored.size)
+        assertEquals("主角抵达了城镇。", stored[1].summary)
+        assertEquals("", stored[1].branches)
+
+        // 总结请求：指令 + 正文；预设未设置思考强度 → 总结请求也不设置。
+        val complete = api.completeRequests.single()
+        assertEquals(listOf("system", "user"), complete.messages.map { it.role })
+        assertEquals("正文回复", complete.messages[1].content)
+        assertEquals(StorySummaryInstructions.SUMMARY, complete.messages[0].content)
+        assertNull(complete.reasoningEffort)
+    }
+
+    @Test
+    fun sendMessage_storyBranches_parsesAndStoresBranches() = runBlocking {
+        seedConversation(storyEnhancement = true, storyBranches = true)
+        seedPreset()
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文回复"))
+            enqueueComplete("总结：主角进入城堡\n选项1：敲门\n选项2：翻墙\n选项3：离开\n选项4：大喊")
+        }
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        val stored = messageDao.all(CONVERSATION_ID)
+        assertEquals("主角进入城堡", stored[1].summary)
+        assertEquals("敲门\n翻墙\n离开\n大喊", stored[1].branches)
+        assertEquals(StorySummaryInstructions.SUMMARY_WITH_BRANCHES, api.completeRequests.single().messages[0].content)
+    }
+
+    @Test
+    fun sendMessage_storySummaryFailure_keepsMessageAndEmitsSummaryFailed() = runBlocking {
+        seedConversation(storyEnhancement = true)
+        seedPreset()
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文回复"))
+            enqueueComplete("", failure = ApiException(Kind.SERVER, "总结服务挂了"))
+        }
+
+        val events = repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        assertTrue(events.filterIsInstance<ChatStreamEvent.SummaryFailed>().isNotEmpty())
+        assertEquals(ChatStreamEvent.Completed, events.last())
+        val stored = messageDao.all(CONVERSATION_ID)
+        assertEquals(2, stored.size)
+        assertEquals("", stored[1].summary)
+    }
+
+    @Test
+    fun sendMessage_storyRounds_compressesOldHistoryIntoRecap() = runBlocking {
+        seedConversation(storyEnhancement = true, storyRounds = 1)
+        seedPreset()
+        messageDao.seed(conversationId = CONVERSATION_ID, role = "user", content = "第一问")
+        messageDao.seed(conversationId = CONVERSATION_ID, role = "assistant", content = "第一答", summary = "第一答总结")
+        messageDao.seed(conversationId = CONVERSATION_ID, role = "user", content = "第二问")
+        messageDao.seed(conversationId = CONVERSATION_ID, role = "assistant", content = "第二答", summary = "第二答总结")
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("第三答"))
+            enqueueComplete("第三答总结")
+        }
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "第三问").toList()
+
+        val request = api.requests.single()
+        val contents = request.messages.map { it.content }
+        assertTrue("前情提要应包含超窗总结", contents.contains("第一答总结"))
+        assertTrue("窗口内原话应保留", contents.contains("第二答"))
+        assertFalse("超窗的 AI 原话不应发送", contents.contains("第一答"))
+        assertFalse("超窗的用户原话不应发送", contents.contains("第一问"))
+        assertFalse("窗口外的用户原话不应发送", contents.contains("第二问"))
+    }
+
+    @Test
+    fun sendMessage_storyRecap_participatesInWorldbookScan() = runBlocking {
+        seedConversation(storyEnhancement = true, storyRounds = 1)
+        seedPreset()
+        // 超窗消息（第 0 轮）：其总结含"钥匙"关键词。
+        messageDao.seed(conversationId = CONVERSATION_ID, role = "user", content = "第零问")
+        messageDao.seed(
+            conversationId = CONVERSATION_ID,
+            role = "assistant",
+            content = "第零答",
+            summary = "主角在桥下捡到一把钥匙",
+        )
+        // 窗口内消息（第 1 轮）。
+        messageDao.seed(conversationId = CONVERSATION_ID, role = "user", content = "第一问")
+        messageDao.seed(conversationId = CONVERSATION_ID, role = "assistant", content = "第一答", summary = "第一答总结")
+        worldBookDao.seed(
+            conversationId = CONVERSATION_ID,
+            title = "钥匙条目",
+            keywords = "钥匙",
+            content = "钥匙条目正文",
+            priority = 5,
+            enabled = true,
+        )
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("新答"))
+            enqueueComplete("新答总结")
+        }
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "继续").toList()
+
+        val request = api.requests.single()
+        assertTrue(
+            "前情提要应包含超窗总结",
+            request.messages.any { it.content == "主角在桥下捡到一把钥匙" },
+        )
+        assertTrue(
+            "前情提要中的关键词应命中世界书",
+            request.messages.any { it.content == "钥匙条目正文" },
+        )
+    }
+
+    @Test
+    fun sendMessage_storySummaryEffort_usesNoneWhenPresetHasEffort() = runBlocking {
+        seedConversation(storyEnhancement = true)
+        seedPreset(reasoningEffort = "high")
+        val api = FakeChatApi().apply {
+            enqueue(chunks = listOf("正文回复"))
+            enqueueComplete("总结内容")
+        }
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        // 预设已设置思考强度 → 总结请求强制"不思考"；正文请求保持预设。
+        assertEquals("high", api.requests.single().reasoningEffort)
+        assertEquals("none", api.completeRequests.single().reasoningEffort)
+    }
+
+    @Test
+    fun sendMessage_enhancementOff_noSummaryRequest() = runBlocking {
+        seedConversation(storyEnhancement = false)
+        seedPreset()
+        val api = FakeChatApi().apply { enqueue(chunks = listOf("正文回复")) }
+
+        repository(api = api).sendMessage(CONVERSATION_ID, "你好").toList()
+
+        assertTrue(api.completeRequests.isEmpty())
+        assertEquals("", messageDao.all(CONVERSATION_ID)[1].summary)
+    }
+
+    // ---------------------------------------------------------------------
     // 测试辅助
     // ---------------------------------------------------------------------
 
@@ -561,6 +720,9 @@ class ChatRepositoryTest {
         statusBodyInstruction: String = "",
         statusBarInstruction: String = "",
         statusForceNoThinking: Boolean = false,
+        storyEnhancement: Boolean = false,
+        storyBranches: Boolean = false,
+        storyRounds: Int = 2,
     ) {
         conversationDao.seed(
             ConversationEntity(
@@ -576,6 +738,9 @@ class ChatRepositoryTest {
                 statusBodyInstruction = statusBodyInstruction,
                 statusBarInstruction = statusBarInstruction,
                 statusForceNoThinking = statusForceNoThinking,
+                storyEnhancement = storyEnhancement,
+                storyBranches = storyBranches,
+                storyRounds = storyRounds,
                 createdAt = 0L,
                 updatedAt = 0L,
             ),
@@ -713,12 +878,13 @@ private class FakeMessageDao : MessageDao {
     private val items = mutableListOf<MessageEntity>()
     private var nextId = 1L
 
-    fun seed(conversationId: Long, role: String, content: String): MessageEntity {
+    fun seed(conversationId: Long, role: String, content: String, summary: String = ""): MessageEntity {
         val stored = MessageEntity(
             id = nextId++,
             conversationId = conversationId,
             role = role,
             content = content,
+            summary = summary,
             createdAt = 0L,
         )
         items.add(stored)
@@ -754,6 +920,13 @@ private class FakeMessageDao : MessageDao {
 
     override suspend fun getLastMessage(conversationId: Long): MessageEntity? =
         items.filter { it.conversationId == conversationId }.maxByOrNull { it.id }
+
+    override suspend fun updateSummary(id: Long, summary: String, branches: String) {
+        val index = items.indexOfFirst { it.id == id }
+        if (index >= 0) {
+            items[index] = items[index].copy(summary = summary, branches = branches)
+        }
+    }
 }
 
 /** 内存版 [WorldBookDao]。 */
@@ -839,9 +1012,18 @@ private class FakeChatApi : ChatApi {
     val requests = mutableListOf<RecordedRequest>()
     private val responses = ArrayDeque<Pair<List<String>, Exception?>>()
 
-    /** 追加一次响应：先发完 [chunks] 再抛出 [failure]（可为 null）。 */
+    /** 非流式请求记录。 */
+    val completeRequests = mutableListOf<CompleteRequest>()
+    private val completeResponses = ArrayDeque<Pair<String, Exception?>>()
+
+    /** 追加一次流式响应：先发完 [chunks] 再抛出 [failure]（可为 null）。 */
     fun enqueue(chunks: List<String> = emptyList(), failure: Exception? = null) {
         responses.addLast(chunks to failure)
+    }
+
+    /** 追加一次非流式响应：返回 [reply]，或抛出 [failure]（可为 null）。 */
+    fun enqueueComplete(reply: String, failure: Exception? = null) {
+        completeResponses.addLast(reply to failure)
     }
 
     override fun chatStream(
@@ -859,10 +1041,34 @@ private class FakeChatApi : ChatApi {
         }
         failure?.let { throw it }
     }
+
+    override suspend fun complete(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        messages: List<ChatMessage>,
+        temperature: Double,
+        reasoningEffort: String?,
+    ): String {
+        completeRequests.add(CompleteRequest(baseUrl, apiKey, model, messages, temperature, reasoningEffort))
+        val (reply, failure) = if (completeResponses.isEmpty()) "" to null else completeResponses.removeFirst()
+        failure?.let { throw it }
+        return reply
+    }
 }
 
-/** 假 [ChatApi] 记录下来的单次请求参数。 */
+/** 假 [ChatApi] 记录下来的单次流式请求参数。 */
 private data class RecordedRequest(
+    val baseUrl: String,
+    val apiKey: String,
+    val model: String,
+    val messages: List<ChatMessage>,
+    val temperature: Double,
+    val reasoningEffort: String?,
+)
+
+/** 假 [ChatApi] 记录下来的单次非流式请求参数。 */
+private data class CompleteRequest(
     val baseUrl: String,
     val apiKey: String,
     val model: String,

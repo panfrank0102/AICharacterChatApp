@@ -110,6 +110,55 @@ class OpenAiClient(private val client: OkHttpClient = defaultClient()) : ChatApi
         }
     }
 
+    /**
+     * 发起一次非流式聊天请求并返回完整回复文本。
+     *
+     * @param baseUrl 服务地址，末尾斜杠可有可无。
+     * @param apiKey API Key，会以 Bearer 方式放入请求头。
+     * @param model 模型名。
+     * @param messages 本次请求的完整消息列表。
+     * @param temperature 采样温度。
+     * @param reasoningEffort 思考强度（`none`/`low`/`medium`/`high` 等），null 表示不发送该参数。
+     * @return 完整回复文本；模型未输出内容时返回空串。
+     * @throws ApiException 网络、HTTP 或解析错误。
+     */
+    override suspend fun complete(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        messages: List<ChatMessage>,
+        temperature: Double,
+        reasoningEffort: String?,
+    ): String = withContext(Dispatchers.IO) {
+        val request = buildRequest(
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            model = model,
+            messages = messages,
+            temperature = temperature,
+            reasoningEffort = reasoningEffort,
+            stream = false,
+        )
+        val call = client.newCall(request)
+        try {
+            call.execute().use { response ->
+                if (!response.isSuccessful) {
+                    val errorBody = response.body.string().take(200)
+                    throw mapHttpError(response.code, errorBody)
+                }
+                val body = response.body.string()
+                json.decodeFromString<ChatCompletionResponse>(body)
+                    .choices.firstOrNull()?.message?.content.orEmpty()
+            }
+        } catch (e: ApiException) {
+            throw e
+        } catch (e: SerializationException) {
+            throw ApiException(Kind.PARSE, e.message ?: ApiException.userMessage(Kind.PARSE))
+        } catch (e: IOException) {
+            throw ApiException(Kind.NETWORK, e.message ?: ApiException.userMessage(Kind.NETWORK))
+        }
+    }
+
     private suspend fun streamInto(
         baseUrl: String,
         apiKey: String,
@@ -199,13 +248,14 @@ class OpenAiClient(private val client: OkHttpClient = defaultClient()) : ChatApi
         messages: List<ChatMessage>,
         temperature: Double,
         reasoningEffort: String?,
+        stream: Boolean = true,
     ): Request {
         val url = baseUrl.trimEnd('/') + "/chat/completions"
         val payload = json.encodeToString(
             ChatRequest(
                 model = model,
                 messages = messages,
-                stream = true,
+                stream = stream,
                 temperature = temperature,
                 reasoningEffort = reasoningEffort,
             ),

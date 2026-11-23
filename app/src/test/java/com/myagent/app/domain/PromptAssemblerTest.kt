@@ -231,6 +231,62 @@ class PromptAssemblerTest {
         assertEquals("system", result.last().role)
     }
 
+    @Test
+    fun assemble_placesStoryRecapAfterSessionPromptBeforeWorldbook() {
+        val result = PromptAssembler.assemble(
+            globalPrompt = "全局",
+            sessionPrompt = "会话",
+            storyRecap = "前情提要",
+            worldbookEntries = listOf(entry(id = 1, content = "世界书一", priority = 10)),
+            history = listOf(
+                message("user", "旧问"),
+                message("assistant", "旧答"),
+            ),
+            userInput = "新问",
+            contextLimitChars = 100_000,
+        )
+        assertEquals(
+            listOf(
+                message("system", "全局"),
+                message("system", "会话"),
+                message("system", "前情提要"),
+                message("system", "世界书一"),
+                message("user", "旧问"),
+                message("assistant", "旧答"),
+                message("user", "新问"),
+            ),
+            result,
+        )
+    }
+
+    @Test
+    fun assemble_skipsBlankStoryRecap() {
+        val result = PromptAssembler.assemble(
+            globalPrompt = "全局",
+            sessionPrompt = "",
+            storyRecap = "  ",
+            worldbookEntries = emptyList(),
+            history = emptyList(),
+            userInput = "你好",
+            contextLimitChars = 100_000,
+        )
+        assertEquals(listOf(message("system", "全局"), message("user", "你好")), result)
+    }
+
+    @Test
+    fun assemble_keepsStoryRecapWhenBudgetTooSmall() {
+        val result = PromptAssembler.assemble(
+            globalPrompt = "",
+            sessionPrompt = "",
+            storyRecap = "rr",
+            worldbookEntries = listOf(entry(id = 1, content = "ww")),
+            history = listOf(message("user", "old")),
+            userInput = "u",
+            contextLimitChars = 0,
+        )
+        assertEquals(listOf("rr", "u"), result.map { it.content })
+    }
+
     private fun entry(
         id: Long,
         content: String,

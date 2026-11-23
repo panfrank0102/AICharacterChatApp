@@ -61,6 +61,7 @@ class CharacterCardImporterTest {
                 card = card,
                 selectedGreetingIndexes = setOf(1),
                 customOpening = "我的开场",
+                storyEnhancement = true,
             ),
         )
 
@@ -71,6 +72,7 @@ class CharacterCardImporterTest {
         assertEquals("用户", conversation?.userName)
         assertEquals(4, conversation?.scanCount)
         assertEquals(0, conversation?.recursionDepth)
+        assertTrue("剧情增强开关应随导入选项落库", conversation?.storyEnhancement == true)
         // 提示词：firstMes 忽略、{{char}} 已替换、空字段跳过
         val prompt = conversation?.systemPrompt.orEmpty()
         assertTrue(prompt.contains("测试角色是一名剑士"))
@@ -130,6 +132,8 @@ class CharacterCardImporterTest {
         assertTrue(conversationDao.find(result.conversationId)?.systemPrompt.orEmpty().contains("RPG冒险故事系统"))
         // 本卡 post_history_instructions 为空，后置提示词应为空串
         assertEquals("", conversationDao.find(result.conversationId)?.postHistoryPrompt)
+        // 默认未开启剧情增强
+        assertEquals(false, conversationDao.find(result.conversationId)?.storyEnhancement)
     }
 
     // ---------------------------------------------------------------------
@@ -233,5 +237,12 @@ class CharacterCardImporterTest {
 
         override suspend fun getLastMessage(conversationId: Long): MessageEntity? =
             items.filter { it.conversationId == conversationId }.maxByOrNull { it.id }
+
+        override suspend fun updateSummary(id: Long, summary: String, branches: String) {
+            val index = items.indexOfFirst { it.id == id }
+            if (index >= 0) {
+                items[index] = items[index].copy(summary = summary, branches = branches)
+            }
+        }
     }
 }

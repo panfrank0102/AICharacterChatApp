@@ -20,7 +20,8 @@ import com.myagent.app.data.db.entity.WorldBookEntryEntity
  *
  * 需在 Application 中调用 [init] 完成初始化，之后通过 [instance] 获取单例。
  * 已提供 1→2（模型预设新增思考强度字段）、2→3（会话新增用户称呼字段）、
- * 3→4（会话新增后置提示词字段）与 4→5（会话新增状态栏优化字段）的显式迁移；
+ * 3→4（会话新增后置提示词字段）、4→5（会话新增状态栏优化字段）
+ * 与 5→6（消息新增剧情总结/分支字段、会话新增剧情增强字段）的显式迁移；
  * 其余版本变化仍采用重建表策略（[RoomDatabase.Builder.fallbackToDestructiveMigration]）。
  */
 @Database(
@@ -30,7 +31,7 @@ import com.myagent.app.data.db.entity.WorldBookEntryEntity
         MessageEntity::class,
         WorldBookEntryEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -78,6 +79,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** 5 → 6：消息新增剧情总结/分支字段，会话新增剧情增强字段。 */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE message ADD COLUMN summary TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE message ADD COLUMN branches TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE conversation ADD COLUMN story_enhancement INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE conversation ADD COLUMN story_branches INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE conversation ADD COLUMN story_rounds INTEGER NOT NULL DEFAULT 2")
+            }
+        }
+
         /** 使用 Application Context 创建（或复用）数据库单例。 */
         fun init(context: Context) {
             synchronized(this) {
@@ -87,7 +99,7 @@ abstract class AppDatabase : RoomDatabase() {
                         AppDatabase::class.java,
                         "myagent.db",
                     )
-                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                         .fallbackToDestructiveMigration(dropAllTables = true)
                         .build()
                 }

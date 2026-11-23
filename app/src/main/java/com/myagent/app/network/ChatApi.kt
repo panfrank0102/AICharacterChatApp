@@ -23,4 +23,19 @@ interface ChatApi {
         temperature: Double = 0.7,
         reasoningEffort: String? = null,
     ): Flow<String>
+
+    /**
+     * 发起一次非流式聊天请求，返回完整回复文本（剧情总结等场景使用）。
+     *
+     * @param reasoningEffort 思考强度（`none`/`low`/`medium`/`high` 等），null 表示不发送该参数。
+     * @throws ApiException 网络、HTTP 或解析错误。
+     */
+    suspend fun complete(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        messages: List<ChatMessage>,
+        temperature: Double = 0.7,
+        reasoningEffort: String? = null,
+    ): String
 }

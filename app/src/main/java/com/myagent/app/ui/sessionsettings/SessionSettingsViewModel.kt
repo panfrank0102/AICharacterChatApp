@@ -102,6 +102,20 @@ class SessionSettingsViewModel(
         updateSettings { it.copy(statusForceNoThinking = v) }
     }
 
+    /**
+     * 开关「剧情分支选择」（剧情增强会话）：总结请求同时返回四个备选选项。
+     */
+    fun setStoryBranches(v: Boolean) {
+        updateSettings { it.copy(storyBranches = v) }
+    }
+
+    /**
+     * 设置剧情增强的发送轮次（1~10）：每轮请求发送最近 N 轮原话，更早的历史用剧情总结。
+     */
+    fun setStoryRounds(v: Int) {
+        updateSettings { it.copy(storyRounds = v.coerceIn(MIN_STORY_ROUNDS, MAX_STORY_ROUNDS)) }
+    }
+
     /** 先读取数据库中的最新会话，再只覆盖指定字段后写回，避免覆盖其他并发修改。 */
     private fun updateSettings(transform: (ConversationEntity) -> ConversationEntity) {
         viewModelScope.launch {
@@ -119,6 +133,8 @@ class SessionSettingsViewModel(
                 statusBodyInstruction = updated.statusBodyInstruction,
                 statusBarInstruction = updated.statusBarInstruction,
                 statusForceNoThinking = updated.statusForceNoThinking,
+                storyBranches = updated.storyBranches,
+                storyRounds = updated.storyRounds,
             )
         }
     }
@@ -127,6 +143,12 @@ class SessionSettingsViewModel(
 
         /** 用户称呼为空时的默认值，与数据库默认值一致。 */
         const val DEFAULT_USER_NAME = "用户"
+
+        /** 剧情增强发送轮次下限。 */
+        const val MIN_STORY_ROUNDS = 1
+
+        /** 剧情增强发送轮次上限。 */
+        const val MAX_STORY_ROUNDS = 10
 
         /** 扫描条数下限。 */
         const val MIN_SCAN_COUNT = 0

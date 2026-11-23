@@ -2,6 +2,7 @@ package com.myagent.app.ui.chat
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -46,6 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -94,6 +98,7 @@ fun ChatScreen(
     val streamingText by vm.streamingText.collectAsState()
     val statusStreamText by vm.statusStreamText.collectAsState()
     val error by vm.error.collectAsState()
+    val notice by vm.notice.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val clipboardManager = LocalClipboardManager.current
@@ -110,6 +115,12 @@ fun ChatScreen(
             vm.retry()
         }
         vm.clearError()
+    }
+
+    LaunchedEffect(notice) {
+        val message = notice ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message = message)
+        vm.clearNotice()
     }
 
     Scaffold(
@@ -164,6 +175,8 @@ fun ChatScreen(
                     val isLastMessage = message.id == messages.lastOrNull()?.id
                     MessageBubble(
                         content = message.content,
+                        summary = message.summary,
+                        branches = message.branches,
                         isUser = message.role == ROLE_USER,
                         showRegenerate = !streaming &&
                             message.role == ROLE_ASSISTANT &&
@@ -178,6 +191,7 @@ fun ChatScreen(
                         },
                         onDelete = { pendingDeleteId = message.id },
                         onRegenerate = { vm.regenerate() },
+                        onBranchClick = { branch -> vm.inputText.value = branch },
                     )
                 }
             }
@@ -219,15 +233,19 @@ fun ChatScreen(
 
 /**
  * 单条消息气泡：用户消息靠右、AI 消息靠左，长按复制，下方提供删除按钮；
- * 最后一条 AI 回复额外显示「重新生成」。
+ * 最后一条 AI 回复额外显示「重新生成」。剧情增强会话的 AI 气泡还会在正文下方
+ * 显示剧情总结块与（可选）四个剧情分支按钮。
  *
  * @param content 气泡正文。
+ * @param summary 剧情总结（剧情增强）；空白不显示。
+ * @param branches 剧情分支选项（按换行分隔）；空白不显示。
  * @param streamingStatusText 状态栏优化·流式阶段的状态栏原文（非空时渐进渲染面板）。
  * @param isUser 是否为用户消息（决定对齐方式与配色）。
  * @param showRegenerate 是否显示「重新生成」按钮。
  * @param onLongClick 长按气泡的回调（复制内容）。
  * @param onDelete 删除按钮回调；为 null 时不显示删除按钮（如流式气泡）。
  * @param onRegenerate 「重新生成」按钮回调。
+ * @param onBranchClick 点击剧情分支的回调（把分支文字填入输入框，不发送）。
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -239,6 +257,9 @@ private fun MessageBubble(
     onDelete: (() -> Unit)?,
     onRegenerate: () -> Unit,
     streamingStatusText: String = "",
+    summary: String = "",
+    branches: String = "",
+    onBranchClick: (String) -> Unit = {},
 ) {
     val bubbleColor = if (isUser) {
         MaterialTheme.colorScheme.primaryContainer
@@ -268,11 +289,30 @@ private fun MessageBubble(
             color = bubbleColor,
             contentColor = textColor,
         ) {
-            ChatMessageContent(
-                content = content,
-                streamingStatusText = streamingStatusText,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            )
+            Column {
+                ChatMessageContent(
+                    content = content,
+                    streamingStatusText = streamingStatusText,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+                if (summary.isNotBlank()) {
+                    StorySummaryBlock(
+                        summary = summary,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+                val branchList = branches.lineSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .toList()
+                if (branchList.isNotEmpty()) {
+                    BranchOptionsBlock(
+                        branches = branchList,
+                        onBranchClick = onBranchClick,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             onDelete?.let { deleteAction ->
@@ -349,5 +389,76 @@ private fun copyToClipboard(
     clipboardManager.setText(AnnotatedString(text))
     scope.launch {
         snackbarHostState.showSnackbar("已复制")
+    }
+}
+
+/**
+ * 剧情总结块：AI 气泡正文下方的小卡片（剧情增强）。
+ *
+ * @param summary 剧情总结文本。
+ * @param modifier 外部修饰符。
+ */
+@Composable
+private fun StorySummaryBlock(summary: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.padding(bottom = 6.dp)) {
+        Text(
+            text = "剧情总结",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp),
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ) {
+            Text(
+                text = summary,
+                modifier = Modifier.padding(8.dp),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+/**
+ * 剧情分支选项：4 个可点击按钮，点击后把分支文字填入输入框（不发送）。
+ *
+ * @param branches 分支选项列表（可能少于 4 个）。
+ * @param onBranchClick 点击分支的回调。
+ * @param modifier 外部修饰符。
+ */
+@Composable
+private fun BranchOptionsBlock(
+    branches: List<String>,
+    onBranchClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.padding(bottom = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = "剧情分支",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        branches.forEach { branch ->
+            OutlinedButton(
+                onClick = { onBranchClick(branch) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = branch,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
     }
 }

@@ -29,6 +29,7 @@ class ConversationRepository(private val dao: ConversationDao) {
      * @param statusBodyInstruction 状态栏优化·正文请求的附加指令；空串表示使用内置默认指令。
      * @param statusBarInstruction 状态栏优化·状态栏请求的附加指令；空串表示使用内置默认指令。
      * @param statusForceNoThinking 状态栏优化·是否强制状态栏请求关闭思考模式。
+     * @param storyEnhancement 剧情增强：是否开启（创建时决定，创建后不可更改）。
      * @return 新会话 id。
      */
     suspend fun create(
@@ -43,6 +44,7 @@ class ConversationRepository(private val dao: ConversationDao) {
         statusBodyInstruction: String = "",
         statusBarInstruction: String = "",
         statusForceNoThinking: Boolean = false,
+        storyEnhancement: Boolean = false,
     ): Long {
         val now = System.currentTimeMillis()
         return dao.insert(
@@ -58,6 +60,7 @@ class ConversationRepository(private val dao: ConversationDao) {
                 statusBodyInstruction = statusBodyInstruction,
                 statusBarInstruction = statusBarInstruction,
                 statusForceNoThinking = statusForceNoThinking,
+                storyEnhancement = storyEnhancement,
                 createdAt = now,
                 updatedAt = now,
             ),
@@ -70,7 +73,10 @@ class ConversationRepository(private val dao: ConversationDao) {
         dao.update(existing.copy(title = title))
     }
 
-    /** 更新会话级设置（预设、提示词、扫描条数、递归深度、用户称呼、状态栏优化）。 */
+    /**
+     * 更新会话级设置（预设、提示词、扫描条数、递归深度、用户称呼、状态栏优化、
+     * 剧情分支选择与发送轮次；剧情增强开关不在其中——创建后不可更改）。
+     */
     suspend fun updateSettings(
         id: Long,
         presetId: Long?,
@@ -83,6 +89,8 @@ class ConversationRepository(private val dao: ConversationDao) {
         statusBodyInstruction: String,
         statusBarInstruction: String,
         statusForceNoThinking: Boolean,
+        storyBranches: Boolean,
+        storyRounds: Int,
     ) {
         val existing = dao.getById(id) ?: return
         dao.update(
@@ -97,6 +105,8 @@ class ConversationRepository(private val dao: ConversationDao) {
                 statusBodyInstruction = statusBodyInstruction,
                 statusBarInstruction = statusBarInstruction,
                 statusForceNoThinking = statusForceNoThinking,
+                storyBranches = storyBranches,
+                storyRounds = storyRounds.coerceIn(1, 10),
             ),
         )
     }

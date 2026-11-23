@@ -24,8 +24,14 @@ class ConversationListViewModel(
         .observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** 新建一个空标题会话，返回新会话 id（标题由后续首条用户消息自动生成）。 */
-    suspend fun createConversation(): Long = conversationRepository.create(title = "")
+    /**
+     * 新建一个会话，返回新会话 id（标题为空时由后续首条用户消息自动生成）。
+     *
+     * @param title 会话标题（可为空）。
+     * @param storyEnhancement 是否开启剧情增强（创建后不可更改）。
+     */
+    suspend fun createConversation(title: String, storyEnhancement: Boolean): Long =
+        conversationRepository.create(title = title, storyEnhancement = storyEnhancement)
 
     /** 重命名指定会话。 */
     fun rename(id: Long, title: String) = viewModelScope.launch {

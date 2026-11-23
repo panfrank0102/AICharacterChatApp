@@ -73,6 +73,9 @@ class ChatViewModel(
     /** 待展示的错误提示；界面展示后调用 [clearError] 清除。 */
     val error = MutableStateFlow<String?>(null)
 
+    /** 轻提示（不可重试，如剧情总结生成失败）；界面展示后调用 [clearNotice] 清除。 */
+    val notice = MutableStateFlow<String?>(null)
+
     /** 当前流式请求任务，用于「停止」时取消。 */
     private var streamJob: Job? = null
 
@@ -112,6 +115,11 @@ class ChatViewModel(
         error.value = null
     }
 
+    /** 清除轻提示（snackbar 展示结束后调用）。 */
+    fun clearNotice() {
+        notice.value = null
+    }
+
     /**
      * 启动一次流式请求：消费仓库的流式事件，正文增量写入 [streamingText]、
      * 状态栏增量写入 [statusStreamText]；失败提示写入 [error]。
@@ -127,6 +135,7 @@ class ChatViewModel(
             streamingText.value = ""
             statusStreamText.value = ""
             error.value = null
+            notice.value = null
             try {
                 block().collect { event ->
                     when (event) {
@@ -144,6 +153,10 @@ class ChatViewModel(
 
                         is ChatStreamEvent.StatusFailed -> {
                             error.value = event.userMessage
+                        }
+
+                        is ChatStreamEvent.SummaryFailed -> {
+                            notice.value = event.userMessage
                         }
 
                         ChatStreamEvent.Completed -> Unit
