@@ -23,9 +23,11 @@ android {
 
     buildTypes {
         release {
+            // 自用发布包：使用 debug 签名（无需额外配置密钥库），并关闭 R8 优化/混淆，
+            // 避免自用包因混淆导致 Compose/序列化等反射相关功能异常。
+            signingConfig = signingConfigs.getByName("debug")
             optimization {
-                enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+                enable = false
             }
         }
     }

@@ -35,3 +35,5 @@ deps_download.log
 /verify_small_changes.ps1
 /verify_story.ps1
 /verify_story2.ps1
+/release/
+/apk_badging.txt
