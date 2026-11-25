@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MyAgent_android"
+rootProject.name = "AICharacterChatApp"
 include(":app")

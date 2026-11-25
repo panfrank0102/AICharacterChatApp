@@ -113,7 +113,7 @@ fun ConversationListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("MyAgent") },
+                title = { Text("AICharacterChatApp") },
                 actions = {
                     TextButton(
                         onClick = { importLauncher.launch(arrayOf("image/png", "application/json")) },

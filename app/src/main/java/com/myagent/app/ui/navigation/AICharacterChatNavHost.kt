@@ -21,7 +21,7 @@ import com.myagent.app.ui.settings.PromptEditScreen
  * 应用导航图：注册全部页面路由与页面间的跳转回调。
  */
 @Composable
-fun MyAgentNavHost() {
+fun AICharacterChatNavHost() {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = Routes.CONVERSATION_LIST) {
 
